@@ -1,0 +1,101 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      stt:
+        condition: service_healthy
+      tts:
+        condition: service_healthy
+    restart: unless-stopped
+
+  orchestrator:
+    build:
+      context: ./services
+      dockerfile: orchestrator/Dockerfile
+    image: nodeava-orch:latest
+    container_name: nodeava-orch
+    ports:
+      - "127.0.0.1:8082:8082"
+    volumes:
+      # Plan #3 wiki tools read from /app/wiki. Mount the repo-root wiki dir
+      # (curated, committed) with write access for Plan #6 ingest workflow.
+      - ./wiki:/app/wiki:rw
+      - ./raw:/app/raw:rw
+      - ./state:/app/state:rw
+      # Plan #7: catalog.yml must be visible inside the container.
+      - ./configs:/app/configs:ro
+    environment:
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - REQUEST_TIMEOUT=300
+      - BIND_HOST=0.0.0.0
+      - BIND_PORT=8082
+      - WIKI_DIR=/app/wiki
+      - RAW_DIR=/app/raw
+      - WIKI_COMPILER_PATH=/app/wiki-compiler/compile_wiki.py
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    depends_on:
+      searxng:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    # Internal only — the workshop orchestrator reaches it via Docker DNS.
+    # No host port mapping by default (do not expose meta-search to the LAN).
+    expose:
+      - "8080"
+    volumes:
+      - ./configs/searxng:/etc/searxng:ro
+    environment:
+      - SEARXNG_BASE_URL=http://searxng:8080/
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  tts:
+    image: ghcr.io/remsky/kokoro-fastapi-gpu:v0.2.4
+    ports:
+      - "${TTS_PORT:-8880}:8880"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8880/v1/models"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  stt:
+    build:
+      context: ./stt-service
+      dockerfile: Dockerfile
+    volumes:
+      - ./models:/models
+    environment:
+      - WHISPER_MODEL=${WHISPER_MODEL:-base.en}
+      - STT_PORT=8080
+    ports:
+      - "${STT_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped

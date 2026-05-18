@@ -1,0 +1,149 @@
+# Manifest for NodeAva's self-knowledge wiki.
+# Each entry compiles into wiki/<category>/<slug>.md.
+
+concepts:
+  - slug: nodeava-overview
+    title: What is NodeAva?
+    summary: One-page elevator pitch + architecture diagram in words.
+    sources:
+      - CLAUDE.md
+      - README.md
+
+  - slug: pipeline-architecture
+    title: The NodeAva Pipeline
+    summary: How user speech becomes avatar speech, stage by stage.
+    sources:
+      - CLAUDE.md
+      - frontend/src/pipeline/Orchestrator.js
+      - docker-compose.yml
+
+  - slug: language-model
+    title: The Language Model
+    summary: Qwen3-4B via llama.cpp; thinking mode; tool calling.
+    sources:
+      - CLAUDE.md
+      - services/orchestrator/README.md
+      - services/orchestrator/orchestrator/providers/local.py
+
+  - slug: text-to-speech
+    title: Text-to-Speech (TTS)
+    summary: Kokoro-82M via Kokoro-FastAPI; PCM + word timestamps; lip sync.
+    sources:
+      - frontend/src/tts/TTSManager.js
+      - CLAUDE.md
+
+  - slug: speech-to-text
+    title: Speech-to-Text (STT)
+    summary: Whisper base.en via whisper.cpp; VAD before transcription.
+    sources:
+      - frontend/src/stt/STTManager.js
+      - CLAUDE.md
+
+  - slug: avatar-rendering
+    title: The 3D Avatar
+    summary: TalkingHead + Three.js; loading custom .glb avatars.
+    sources:
+      - frontend/src/avatar/AvatarManager.js
+      - CLAUDE.md
+
+  - slug: agentic-loop
+    title: The Agentic Loop
+    summary: How tool calls cascade; max rounds; named SSE events.
+    sources:
+      - services/orchestrator/orchestrator/agentic.py
+      - services/orchestrator/README.md
+
+  - slug: tool-registry
+    title: The Tool Registry
+    summary: How browser.* and wiki.* tools are registered; adding custom tools.
+    sources:
+      - services/orchestrator/orchestrator/tools/__init__.py
+      - services/orchestrator/orchestrator/tools/base.py
+      - services/orchestrator/README.md
+
+  - slug: web-search
+    title: How NodeAva Searches the Web
+    summary: SearXNG + browser.search/open/find; SSRF guards.
+    sources:
+      - services/orchestrator/orchestrator/tools/browser.py
+      - services/orchestrator/README.md
+      - configs/searxng/settings.yml
+
+  - slug: wiki-system
+    title: The Wiki System
+    summary: Karpathy-style markdown wiki; index-driven retrieval; ingest pipeline.
+    sources:
+      - services/orchestrator/orchestrator/tools/wiki.py
+      - services/wiki-compiler/README.md
+
+entities:
+  - slug: qwen3-4b
+    title: Qwen3-4B (Default LLM)
+    summary: Alibaba's 4B-parameter thinking model; Q4_K_M quantization.
+    sources:
+      - CLAUDE.md
+      - docker-compose.yml
+
+  - slug: kokoro-tts
+    title: Kokoro-82M (TTS Engine)
+    summary: 82M-parameter neural TTS; runs on GPU or CPU.
+    sources:
+      - CLAUDE.md
+      - docker-compose.yml
+
+  - slug: whisper-base-en
+    title: Whisper base.en (STT Model)
+    summary: OpenAI's English-only base model; runs via whisper.cpp.
+    sources:
+      - CLAUDE.md
+      - docker-compose.yml
+
+  - slug: talkinghead
+    title: TalkingHead (Avatar Engine)
+    summary: Browser-side 3D avatar with lip sync; CC BY-NC-SA 4.0 licensing.
+    sources:
+      - frontend/src/avatar/AvatarManager.js
+      - CLAUDE.md
+
+  - slug: searxng
+    title: SearXNG (Search Engine)
+    summary: Self-hosted meta-search; bundled, JSON API enabled.
+    sources:
+      - configs/searxng/settings.yml
+      - services/orchestrator/README.md
+
+faqs:
+  - slug: system-requirements
+    title: System Requirements
+    summary: 8 GB GPU minimum; supported OSes; what doesn't work.
+    sources:
+      - CLAUDE.md
+      - README.md
+
+  - slug: change-voice
+    title: How do I change the avatar's voice?
+    summary: Voice selector in the control panel; available Kokoro voices.
+    sources:
+      - frontend/src/ui/components/ControlPanel.js
+      - frontend/src/tts/TTSManager.js
+
+  - slug: swap-model
+    title: How do I swap the LLM model?
+    summary: Provider toggle (local vs cloud); model file replacement (local).
+    sources:
+      - services/orchestrator/README.md
+      - CLAUDE.md
+
+  - slug: enable-web-search
+    title: How do I make the avatar search the web?
+    summary: The 🔍 Web search toggle in the control panel.
+    sources:
+      - frontend/README.md
+      - services/orchestrator/README.md
+
+  - slug: add-to-wiki
+    title: How do I add my own knowledge to the wiki?
+    summary: POST /v1/ingest with a file; the agent compiles it into the wiki.
+    sources:
+      - services/wiki-compiler/README.md
+      - services/orchestrator/README.md

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Digital Avatar</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="avatar-container"></div>
+  <div id="ui-overlay">
+    <div id="status-bar"></div>
+    <div id="subtitle-overlay"></div>
+    <div id="control-panel"></div>
+  </div>
+  <!-- Plan #8: dashboard drawer + floating toggle -->
+  <button id="nv-walk-trigger" type="button" aria-label="Start walkthrough" title="Walkthrough">?</button>
+  <button id="nv-dash-toggle" class="nv-dash-toggle" type="button" aria-label="Toggle dashboard" aria-expanded="false">
+    <span class="nv-dash-toggle-icon">⏵</span>
+  </button>
+
+  <aside id="nv-dash-drawer" class="nv-dash-drawer" role="complementary" aria-label="NodeAva controls" aria-hidden="true">
+    <header class="nv-dash-header">
+      <h2>NodeAva</h2>
+      <span class="nv-dash-hint">press <kbd>]</kbd> to toggle</span>
+    </header>
+    <section class="nv-dash-controls" id="nv-dash-controls"></section>
+    <div id="nv-dash-bench"></div>
+    <div id="nv-dash-personality"></div>
+    <section class="nv-dash-flow-events">
+      <div class="nv-dash-flow" id="nv-dash-flow"></div>
+      <div class="nv-dash-events" id="nv-dash-events"></div>
+    </section>
+  </aside>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

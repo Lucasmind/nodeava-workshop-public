@@ -1,0 +1,14 @@
+Write a wiki page titled "{title}" for NodeAva's `wiki/entities/{slug}.md`.
+
+Source material:
+
+{sources}
+
+An entity page describes a specific named thing — a model, a library, a
+service. The page should answer:
+- What is this entity?
+- What is its role in NodeAva specifically?
+- Concrete facts: version, license, size, port, where to find it in the repo
+- Where to learn more (upstream URL if known from sources)
+
+Output ONLY the markdown body, starting with a `# {title}` heading.

@@ -1,0 +1,25 @@
+services:
+  tts:
+    build:
+      context: ./docker/kokoro-rocm
+    image: nodeava-kokoro-rocm:latest
+    ports:
+      - "${TTS_PORT:-8880}:8880"
+    environment:
+      - USE_GPU=true
+    devices:
+      - /dev/dri:/dev/dri
+      - /dev/kfd:/dev/kfd
+    group_add:
+      - video
+      - render
+
+  stt:
+    devices:
+      - /dev/dri:/dev/dri
+      - /dev/kfd:/dev/kfd
+    volumes:
+      - /usr/share/vulkan/icd.d:/usr/share/vulkan/icd.d:ro
+    group_add:
+      - video
+      - render

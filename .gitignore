@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.env
+models/*.bin
+models/*.gguf
+*.log
+.DS_Store
+.vite/
+.pids/
+logs/
+.playwright-mcp/
+docker-compose.test.yml
+frontend/nginx.workshop.conf
+
+# Plan #6 ingest target — sources dropped here at runtime
+raw/*
+!raw/.gitkeep
+state/current.json
+.superpowers/

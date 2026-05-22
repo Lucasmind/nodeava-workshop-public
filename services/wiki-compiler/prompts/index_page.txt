@@ -1,0 +1,16 @@
+Regenerate `wiki/index.md` for NodeAva's self-knowledge wiki.
+
+Pages currently in the wiki (path → title → one-line summary):
+
+{pages}
+
+Write the index page. Structure:
+1. A short opener (3-4 sentences) explaining the wiki's purpose: this is
+   the LLM's first stop for "what do I know?". The agent reads this index
+   before opening specific pages.
+2. Four sections — `## Concepts`, `## Entities`, `## FAQs`, `## Sources`.
+   List pages under each, formatted as: `- [Title](concepts/slug.md) — summary`.
+3. `## Sources` should say "(empty — populated at runtime via /v1/ingest)"
+   if no source pages exist yet.
+
+Output ONLY the markdown body, starting with `# Wiki Index`.

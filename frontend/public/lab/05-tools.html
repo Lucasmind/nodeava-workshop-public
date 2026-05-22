@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lab 5 · The Hands (Agentic Tools)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="_shared.css">
+<style>
+  .toggle-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.15s;
+  }
+  .toggle.on  { border-color: var(--success); }
+  .toggle.off { border-color: var(--border); color: var(--text-dim); }
+  .toggle .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--border);
+  }
+  .toggle.on .dot { background: var(--success); }
+  .round {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 8px 0;
+    background: var(--code-bg);
+  }
+  .round .head {
+    display: flex; justify-content: space-between;
+    color: var(--text-dim); font-size: 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    margin-bottom: 6px;
+  }
+  .round .tool-call {
+    padding: 6px 10px;
+    margin: 4px 0;
+    border-left: 3px solid var(--warning);
+    background: var(--panel);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+  }
+  .round .tool-call.err { border-left-color: var(--danger); color: var(--danger); }
+  .round .tool-call.ok  { border-left-color: var(--success); }
+  /* .preset is now in _shared.css — kept here just to note where it moved */
+</style>
+</head>
+<body>
+
+<header class="lab-header">
+  <a class="home" href="index.html">← Workshop Lab</a>
+  <h1>Lab 5 · The Hands</h1>
+  <span class="step-tag">agentic loop · wiki + browser</span>
+</header>
+
+<main>
+
+<div id="preflight" class="preflight checking">Checking services…</div>
+
+<section class="intro">
+  <b>What you're testing:</b> the orchestrator's <i>agentic loop</i>.
+  When tools are enabled, the model can emit <code>tool_calls</code>;
+  the loop executes them, feeds the results back, and loops up to 8
+  rounds before forcing a final answer. Two tool families: <b>wiki</b>
+  (RAG over local docs) and <b>browser</b> (live web search via SearXNG).
+  <span class="what-youll-see">
+    <b>What you'll see:</b> the model emit tool calls, the orchestrator
+    execute them, results fed back, then a final answer. Each round
+    shows up as a <code>round_start</code> / <code>round_end</code>
+    pair with the tools called inside. Try a question with wiki off
+    and watch the model handle the missing capability gracefully.
+  </span>
+</section>
+
+<div class="lab-body">
+
+  <div class="panel">
+    <h2>Tool toggles</h2>
+    <div id="toggles" class="toggle-row"></div>
+
+    <details class="controls">
+      <summary>⚙ Experiment knobs</summary>
+      <div class="controls-body">
+        <div class="controls-grid">
+          <div class="control">
+            <label for="max-rounds">Max tool rounds <span style="color:var(--text-dim)">(orchestrator's safety stop)</span></label>
+            <div class="slider-row">
+              <input type="range" id="max-rounds" min="1" max="8" step="1" value="8">
+              <span class="val" id="max-rounds-val">8</span>
+            </div>
+          </div>
+        </div>
+        <label class="check-row">
+          <input type="checkbox" id="force-tool"> force a tool call (prepends "search the web before answering" to your question)
+        </label>
+        <p style="margin: 6px 0 0; font-size: 12px; color: var(--text-dim);">
+          Note: small models (4B) skip tools on questions that <i>feel</i> familiar.
+          The force toggle is a workaround — it prepends a directive so the model
+          must reach for a tool. Lab 5's pedagogy: see when the model self-routes
+          vs needs prompting.
+        </p>
+      </div>
+    </details>
+
+    <h2>Try a question</h2>
+
+    <div style="margin-bottom: 8px;">
+      <span class="preset" data-q="What is NodeAva?">wiki: "What is NodeAva?"</span>
+      <span class="preset" data-q="Who is the current president of the United States?">browser: current events</span>
+      <span class="preset" data-q="Explain the agentic loop in this system.">wiki: project internals</span>
+      <span class="preset" data-q="What is 17 + 25?">no tools needed</span>
+    </div>
+
+    <label for="user-msg">Your question</label>
+    <textarea id="user-msg" placeholder="Ask something. Watch which tool the model reaches for.">What is NodeAva?</textarea>
+
+    <div class="row">
+      <button id="go">Send</button>
+      <button id="clear" class="secondary">Clear</button>
+    </div>
+
+    <div class="chips">
+      <span class="chip" id="chip-rounds" data-label="rounds">rounds <b>—</b></span>
+      <span class="chip" id="chip-tools" data-label="tool calls">tool calls <b>—</b></span>
+      <span class="chip" id="chip-total" data-label="total">total <b>—</b></span>
+      <span class="chip" id="chip-ttft" data-label="TTFT">TTFT <b>—</b></span>
+    </div>
+
+    <h2 style="margin-top: 24px;">Final answer</h2>
+    <div id="out" class="output"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Round-by-round events</h2>
+    <div id="rounds" class="console" style="font-family: inherit; font-size: 14px;"></div>
+  </div>
+
+</div>
+
+<nav class="lab-nav">
+  <a href="04-orchestrator.html">← Lab 4 · Nervous System</a>
+  <a class="next" href="06-pipeline.html">Lab 6 · Whole Body →</a>
+</nav>
+
+</main>
+
+<script src="_shared.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const out = $("out");
+const rounds = $("rounds");
+
+NA.preflight("preflight", ["orch", "llm"]);
+NA.bindSlider($("max-rounds"), $("max-rounds-val"), (v) => String(v));
+
+let activeTools = { wiki: false, web_search: false };
+
+async function loadState() {
+  try {
+    const r = await fetch("/api/orch/v1/state");
+    const j = await r.json();
+    activeTools = j.active.tools || {};
+    renderToggles();
+  } catch (e) { /* ignore */ }
+}
+
+function renderToggles() {
+  const wrap = $("toggles");
+  while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
+  ["wiki", "web_search"].forEach((name) => {
+    const isOn = !!activeTools[name];
+    const div = document.createElement("div");
+    div.className = "toggle " + (isOn ? "on" : "off");
+    const dot = document.createElement("span"); dot.className = "dot";
+    const label = document.createElement("span");
+    label.textContent = name === "wiki" ? "wiki  (local docs)" : "browser  (web search)";
+    const state = document.createElement("span");
+    state.style.fontFamily = "ui-monospace, monospace";
+    state.style.fontSize = "12px";
+    state.style.color = "var(--text-dim)";
+    state.textContent = isOn ? "ON" : "off";
+    div.appendChild(dot); div.appendChild(label); div.appendChild(state);
+    div.onclick = async () => {
+      const newVal = !activeTools[name];
+      try {
+        const resp = await fetch("/api/orch/v1/swap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "tools", id: name, value: newVal }),
+        });
+        if (resp.ok) { activeTools[name] = newVal; renderToggles(); }
+      } catch (e) { /* ignore */ }
+    };
+    wrap.appendChild(div);
+  });
+}
+
+document.querySelectorAll(".preset").forEach(p => {
+  p.onclick = () => { $("user-msg").value = p.dataset.q; };
+});
+
+$("clear").onclick = () => {
+  out.textContent = "";
+  NA.clearConsole(rounds);
+  NA.clearChips("chip-rounds", "chip-tools", "chip-total", "chip-ttft");
+};
+
+let currentRoundEl = null;
+
+function appendRound(num) {
+  const div = document.createElement("div");
+  div.className = "round";
+  const head = document.createElement("div");
+  head.className = "head";
+  const left = document.createElement("span");
+  left.textContent = "Round " + num;
+  const right = document.createElement("span"); right.id = "round-" + num + "-time";
+  right.textContent = "...";
+  head.appendChild(left); head.appendChild(right);
+  div.appendChild(head);
+  rounds.appendChild(div);
+  rounds.scrollTop = rounds.scrollHeight;
+  currentRoundEl = div;
+  return div;
+}
+
+function appendToolCall(name, args, durMs, err) {
+  if (!currentRoundEl) return;
+  const div = document.createElement("div");
+  div.className = "tool-call " + (err ? "err" : "ok");
+  const argStr = (() => { try { return JSON.stringify(args); } catch { return String(args); } })();
+  const trunc = (s, n) => (s.length > n ? s.slice(0, n) + "…" : s);
+  div.textContent = name + "(" + trunc(argStr, 90) + ")  → " + (durMs ? NA.ms(durMs) : "running") + (err ? " · " + err : "");
+  currentRoundEl.appendChild(div);
+}
+
+$("go").onclick = async () => {
+  let userMsg = $("user-msg").value.trim();
+  if (!userMsg) return;
+  // Force-tool: prepend a directive so the model reaches for a tool even on
+  // questions it feels confident about (a known limitation of small models —
+  // see the agentic-routing notes in CLAUDE.md / CHANGES.md).
+  if ($("force-tool").checked) {
+    const tools = [];
+    if (activeTools.web_search) tools.push("browser.search");
+    if (activeTools.wiki) tools.push("wiki.search");
+    const ttext = tools.join(" or ") || "an available tool";
+    userMsg = `Use ${ttext} to research this before answering. Question: ${userMsg}`;
+    NA.logLine(rounds, "force-tool ON — prepended directive: \"Use " + ttext + " to research…\"", "event");
+  }
+  out.textContent = "";
+  if (!$("force-tool").checked) NA.clearConsole(rounds);
+  NA.clearChips("chip-rounds", "chip-tools", "chip-total", "chip-ttft");
+  $("go").disabled = true;
+
+  const t0 = NA.now();
+  let tFirst = 0;
+  let roundCount = 0;
+  let toolCount = 0;
+  const toolStarts = {};
+
+  try {
+    const resp = await fetch("/api/llm/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: userMsg }],
+        stream: true,
+        max_rounds: Number($("max-rounds").value),  // honored by orchestrator if supported
+      }),
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+
+    for await (const msg of NA.parseSSE(resp)) {
+      if (msg.data === "[DONE]") break;
+      if (msg.event === "message") {
+        const delta = msg.data.choices?.[0]?.delta?.content;
+        if (delta) {
+          if (tFirst === 0) {
+            tFirst = NA.now() - t0;
+            NA.setChip("chip-ttft", "TTFT", NA.ms(tFirst), "success");
+          }
+          out.textContent += delta;
+        }
+        continue;
+      }
+      // Named events from the agentic loop
+      switch (msg.event) {
+        case "stage_timing":
+          if (msg.data.stage === "round_start") {
+            roundCount = msg.data.round_num;
+            NA.setChip("chip-rounds", "rounds", String(roundCount));
+            appendRound(roundCount);
+          } else if (msg.data.stage === "round_end") {
+            const el = document.getElementById("round-" + msg.data.round_num + "-time");
+            if (el) el.textContent = NA.ms(msg.data.duration_ms);
+          }
+          break;
+        case "tool_call_start":
+          toolStarts[msg.data.id] = NA.now();
+          appendToolCall(msg.data.name, msg.data.arguments, 0, null);
+          break;
+        case "tool_call_end":
+          toolCount += 1;
+          NA.setChip("chip-tools", "tool calls", String(toolCount));
+          // Replace placeholder line with finalized one
+          if (currentRoundEl) {
+            const lines = currentRoundEl.querySelectorAll(".tool-call");
+            const last = lines[lines.length - 1];
+            if (last) {
+              const dur = msg.data.duration_ms;
+              const err = msg.data.error;
+              last.className = "tool-call " + (err ? "err" : "ok");
+              last.textContent = last.textContent.replace(/→ .*/, "→ " + NA.ms(dur) + (err ? " · " + err : ""));
+            }
+          }
+          break;
+        case "thinking_token":
+          // Skip in the round panel; can be noisy
+          break;
+        case "error":
+          appendToolCall("ERROR", msg.data, 0, msg.data?.message || "error");
+          break;
+      }
+    }
+
+    const tTotal = NA.now() - t0;
+    NA.setChip("chip-total", "total", NA.sec(tTotal), "success");
+  } catch (e) {
+    out.textContent = "(error — see rounds panel)";
+    const div = document.createElement("div");
+    div.style.color = "var(--danger)";
+    div.textContent = "ERROR: " + e.message;
+    rounds.appendChild(div);
+  } finally {
+    $("go").disabled = false;
+  }
+};
+
+loadState();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+Write a wiki source-summary page for `wiki/sources/{slug}.md`. This page
+summarizes a freshly-ingested document so the agent can find and quote
+the source's contents via the wiki tools.
+
+Source file: {filename}
+Title: {title}
+
+Contents:
+
+{content}
+
+The page should:
+- Open with a 1-2 sentence summary of what this document is about.
+- List the 3-5 most important facts, claims, or entities from the document.
+- Be a faithful summary — don't add information that isn't in the source.
+- Length: 150-300 words.
+
+Output ONLY the markdown body, starting with a `# {title}` heading.

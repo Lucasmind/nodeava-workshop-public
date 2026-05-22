@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lab 2 · The Ears (Speech-to-Text)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+
+<header class="lab-header">
+  <a class="home" href="index.html">← Workshop Lab</a>
+  <h1>Lab 2 · The Ears</h1>
+  <span class="step-tag">POST /api/stt/v1/audio/transcriptions</span>
+</header>
+
+<main>
+
+<div id="preflight" class="preflight checking">Checking services…</div>
+
+<section class="intro">
+  <b>What you're testing:</b> Whisper (the <code>base.en</code> model)
+  running in a Docker container with Vulkan or CUDA GPU acceleration.
+  This is the perception layer — the part that hears speech and converts
+  it to text.
+  <span class="what-youll-see">
+    <b>What you'll see:</b> the time Whisper took vs the length of your
+    recording. The ratio is <b>RTF</b> (real-time factor) — under 1.0
+    means it transcribed faster than real-time. On a workshop GPU you'll
+    typically see 0.05-0.20 RTF, i.e. 5-20x faster than speech.
+    <i>Endpointing</i> — knowing <i>when</i> the user is done talking —
+    is a separate problem; we cover that in Lab 6.
+  </span>
+</section>
+
+<div class="lab-body">
+
+  <div class="panel">
+    <h2>Record from mic</h2>
+
+    <div class="row">
+      <button id="rec">● Record</button>
+      <button id="stop" disabled>■ Stop</button>
+      <span id="dur" class="chip">duration <b>—</b></span>
+    </div>
+
+    <details class="controls">
+      <summary>⚙ Experiment knobs</summary>
+      <div class="controls-body">
+        <div class="controls-grid">
+          <div class="control">
+            <label for="lang">Language hint <span style="color:var(--text-dim)">(auto = detect)</span></label>
+            <select id="lang">
+              <option value="">auto-detect</option>
+              <option value="en" selected>English (en)</option>
+              <option value="es">Spanish (es)</option>
+              <option value="fr">French (fr)</option>
+              <option value="de">German (de)</option>
+              <option value="it">Italian (it)</option>
+              <option value="ja">Japanese (ja)</option>
+              <option value="zh">Chinese (zh)</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="temp">Sampling temperature <span style="color:var(--text-dim)">(0 = greedy, higher = more guesses)</span></label>
+            <div class="slider-row">
+              <input type="range" id="temp" min="0" max="1" step="0.05" value="0">
+              <span class="val" id="temp-val">0.00</span>
+            </div>
+          </div>
+        </div>
+        <label class="check-row">
+          <input type="checkbox" id="translate"> translate to English (uses /audio/translations endpoint)
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="vad-skip"> skip blank-audio detection (useful for diagnosing silent recordings)
+        </label>
+      </div>
+    </details>
+
+    <div class="row">
+      <audio id="player" controls style="width: 100%;"></audio>
+    </div>
+
+    <div class="chips">
+      <span class="chip" id="chip-len" data-label="audio">audio <b>—</b></span>
+      <span class="chip" id="chip-decode" data-label="decode">decode <b>—</b></span>
+      <span class="chip" id="chip-rtf" data-label="RTF">RTF <b>—</b></span>
+      <span class="chip" id="chip-bytes" data-label="upload">upload <b>—</b></span>
+    </div>
+
+    <h2 style="margin-top: 24px;">Transcript</h2>
+    <div id="out" class="output"></div>
+
+    <div class="history">
+      <h3>Recent runs (most recent first)</h3>
+      <ol id="history"></ol>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Console</h2>
+    <div id="console" class="console"></div>
+  </div>
+
+</div>
+
+<nav class="lab-nav">
+  <a href="01-llm.html">← Lab 1 · The Brain</a>
+  <a class="next" href="03-tts.html">Lab 3 · The Voice →</a>
+</nav>
+
+</main>
+
+<script src="_shared.js"></script>
+<script>
+const $   = (id) => document.getElementById(id);
+const out = $("out");
+const con = $("console");
+const player = $("player");
+
+NA.preflight("preflight", ["stt"]);
+NA.bindSlider($("temp"), $("temp-val"), (v) => Number(v).toFixed(2));
+
+const historyEl = $("history");
+const runs = []; // {ts, dur, decode, rtf, text}
+function recordRun(r) {
+  runs.unshift(r);
+  if (runs.length > 5) runs.length = 5;
+  while (historyEl.firstChild) historyEl.removeChild(historyEl.firstChild);
+  for (const x of runs) {
+    const li = document.createElement("li");
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = `[${x.dur.toFixed(2)}s audio · decode ${x.decode.toFixed(0)}ms · RTF ${x.rtf.toFixed(2)}] `;
+    li.appendChild(meta);
+    li.appendChild(document.createTextNode(x.text || "(empty)"));
+    historyEl.appendChild(li);
+  }
+}
+
+let audioCtx = null;
+let mediaStream = null;
+let recorder = null;
+let chunks = [];
+let recStart = 0;
+let timer = null;
+
+function fmt(sec) { return sec.toFixed(2) + " s"; }
+
+async function startRecording() {
+  out.textContent = "";
+  NA.clearConsole(con);
+  NA.clearChips("chip-len", "chip-decode", "chip-rtf", "chip-bytes");
+  $("dur").firstChild && ($("dur").firstChild.nodeValue = "duration ");
+  NA.setChip("dur", "duration", "0.0 s");
+
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
+    NA.logLine(con, "✓ mic access granted", "ok");
+  } catch (e) {
+    NA.logLine(con, "✗ mic access denied: " + e.message, "err");
+    return;
+  }
+
+  recorder = new MediaRecorder(mediaStream);
+  chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = onRecordStop;
+  recorder.start();
+  recStart = NA.now();
+  NA.logLine(con, "● recording (MediaRecorder, " + recorder.mimeType + ")", "event");
+
+  $("rec").disabled = true;
+  $("stop").disabled = false;
+
+  timer = setInterval(() => {
+    const elapsed = (NA.now() - recStart) / 1000;
+    NA.setChip("dur", "duration", elapsed.toFixed(1) + " s");
+  }, 100);
+}
+
+async function stopRecording() {
+  if (!recorder) return;
+  clearInterval(timer);
+  recorder.stop();
+  mediaStream.getTracks().forEach(t => t.stop());
+  $("rec").disabled = false;
+  $("stop").disabled = true;
+}
+
+async function onRecordStop() {
+  const recDur = (NA.now() - recStart) / 1000;
+  NA.logLine(con, "■ stopped — " + fmt(recDur) + " captured", "event");
+
+  // Native MediaRecorder blob (e.g., webm/opus). Convert to WAV via Web Audio.
+  const nativeBlob = new Blob(chunks, { type: chunks[0]?.type || "audio/webm" });
+  NA.logLine(con, "  native blob: " + nativeBlob.type + " · " + NA.fmtBytes(nativeBlob.size), "");
+
+  player.src = URL.createObjectURL(nativeBlob);
+
+  NA.logLine(con, "  decoding via AudioContext → PCM → WAV…", "");
+  const tDecodeStart = NA.now();
+  const wavBlob = await convertToWav(nativeBlob);
+  NA.logLine(con, "  WAV: " + NA.fmtBytes(wavBlob.size) + "  (" + NA.ms(NA.now() - tDecodeStart) + " to convert)", "");
+
+  NA.setChip("chip-len", "audio", fmt(recDur), "success");
+  NA.setChip("chip-bytes", "upload", NA.fmtBytes(wavBlob.size));
+
+  // Endpoint depends on translate toggle. /transcriptions returns text in
+  // the source language; /translations returns English regardless of source.
+  const translate = $("translate").checked;
+  const url = translate
+    ? "/api/stt/v1/audio/translations"
+    : "/api/stt/v1/audio/transcriptions";
+
+  NA.logLine(con, "→ POST " + url, "event");
+  const tNet = NA.now();
+  const fd = new FormData();
+  fd.append("file", wavBlob, "rec.wav");
+  fd.append("model", "base.en");
+  const lang = $("lang").value;
+  if (lang && !translate) fd.append("language", lang);
+  fd.append("temperature", $("temp").value);
+
+  try {
+    const resp = await fetch(url, { method: "POST", body: fd });
+    const decodeMs = NA.now() - tNet;
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const json = await resp.json();
+    const text = (json.text || "").trim();
+
+    out.textContent = text || "(silence — try again)";
+    NA.setChip("chip-decode", "decode", NA.sec(decodeMs), "success");
+
+    const rtf = (decodeMs / 1000) / recDur;
+    const rtfStatus = rtf < 0.3 ? "success" : rtf < 1 ? "warning" : "danger";
+    NA.setChip("chip-rtf", "RTF", rtf.toFixed(3) + (rtf < 1 ? " (faster than real-time)" : ""), rtfStatus);
+
+    NA.logLine(con, "← \"" + text + "\"", "ok");
+    NA.logLine(con, "  decode " + NA.ms(decodeMs) + " for " + fmt(recDur) + " of audio → RTF " + rtf.toFixed(3), "ok");
+
+    recordRun({ ts: Date.now(), dur: recDur, decode: decodeMs, rtf, text });
+  } catch (e) {
+    NA.logLine(con, "ERROR: " + e.message, "err");
+  }
+}
+
+async function convertToWav(blob) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  const buf = await blob.arrayBuffer();
+  const audioBuf = await audioCtx.decodeAudioData(buf);
+  // Whisper handles any sample rate; downmix to mono int16 16 kHz for size.
+  const target = 16000;
+  const channels = 1;
+  const src = audioBuf.getChannelData(0);
+  // Resample if needed
+  let pcmFloat;
+  if (audioBuf.sampleRate === target) {
+    pcmFloat = src;
+  } else {
+    const ratio = audioBuf.sampleRate / target;
+    const outLen = Math.floor(src.length / ratio);
+    pcmFloat = new Float32Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      pcmFloat[i] = src[Math.floor(i * ratio)];
+    }
+  }
+  // Convert float [-1, 1] to int16
+  const pcm16 = new Int16Array(pcmFloat.length);
+  for (let i = 0; i < pcmFloat.length; i++) {
+    const s = Math.max(-1, Math.min(1, pcmFloat[i]));
+    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return NA.pcmToWavBlob(pcm16.buffer, target, channels, 16);
+}
+
+$("rec").onclick  = startRecording;
+$("stop").onclick = stopRecording;
+</script>
+</body>
+</html>

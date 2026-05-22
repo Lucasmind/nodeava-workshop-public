@@ -1,0 +1,16 @@
+[project]
+name = "nodeava-orchestrator"
+version = "0.1.0"
+description = "OpenAI-compatible chat-completions proxy with provider abstraction"
+requires-python = ">=3.12"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["orchestrator*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

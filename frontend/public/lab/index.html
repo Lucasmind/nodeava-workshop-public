@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NodeAva Workshop · Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+
+<header class="lab-header">
+  <span class="home">NodeAva Workshop</span>
+  <h1>Lab</h1>
+  <span class="step-tag">localhost:3000/lab/</span>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>Build a <span class="accent">digital human</span><br>one organ at a time.</h1>
+    <p class="tagline">
+      Six self-contained labs. Each brings up one component, lets you poke
+      it directly, and shows the latency it costs. By the end you've
+      assembled a complete digital human on your own laptop — and you
+      know what every layer is doing.
+    </p>
+  </section>
+
+  <div class="index-grid">
+
+    <a class="lab-card" href="01-llm.html">
+      <div class="num">Lab 1 · ~20 min</div>
+      <h3>The Brain — local LLM</h3>
+      <p>Ollama on the host. Stream tokens from <code>qwen3:4b-instruct</code>,
+      watch time-to-first-token, measure tokens-per-second. This is the
+      cognition layer; nothing else works until it does.</p>
+    </a>
+
+    <a class="lab-card" href="02-stt.html">
+      <div class="num">Lab 2 · ~15 min</div>
+      <h3>The Ears — speech-to-text</h3>
+      <p>Whisper running in Docker with GPU acceleration. Record from
+      your mic, see the transcript come back, learn why endpointing
+      (knowing when the user is done) matters more than transcription
+      accuracy.</p>
+    </a>
+
+    <a class="lab-card" href="03-tts.html">
+      <div class="num">Lab 3 · ~15 min</div>
+      <h3>The Voice — text-to-speech</h3>
+      <p>Kokoro neural TTS. Type a phrase, hear it spoken with word-level
+      timestamps. Compare voices. Learn what first-audio latency and
+      real-time factor mean for "feels alive vs feels dead".</p>
+    </a>
+
+    <a class="lab-card" href="04-orchestrator.html">
+      <div class="num">Lab 4 · ~20 min</div>
+      <h3>The Nervous System — orchestrator</h3>
+      <p>The FastAPI service that holds the personality system prompt
+      and routes every request. Swap personalities live. See how the
+      same model gives radically different answers based on the prompt.</p>
+    </a>
+
+    <a class="lab-card" href="05-tools.html">
+      <div class="num">Lab 5 · ~25 min</div>
+      <h3>The Hands — agentic tools</h3>
+      <p>The agentic loop. Wiki recall (RAG over local docs) and live web
+      search. Watch the model emit tool_calls, see the round-by-round
+      event stream, learn why small models stumble on tool use.</p>
+    </a>
+
+    <a class="lab-card" href="06-pipeline.html">
+      <div class="num">Lab 6 · ~25 min</div>
+      <h3>The Whole Body — full pipeline</h3>
+      <p>Mic → STT → LLM → TTS → avatar. End-to-end latency budget.
+      Why streaming + sentence chunking is the difference between
+      "feels alive" and "wait, is it broken?"</p>
+    </a>
+
+  </div>
+</main>
+
+</body>
+</html>

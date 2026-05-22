@@ -78,6 +78,7 @@ async def chat_completions(request: Request):
         brain = catalog.brain(state["brain"])
     except CatalogError:
         brain = catalog.default_brain()
+        state_store.set_state("brain", brain.id)
 
     # Plan #11: the LM Studio "auto" brain resolves to a concrete model id at
     # request time — the currently-loaded model, else the configured fallback

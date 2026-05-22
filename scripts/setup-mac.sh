@@ -7,6 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 KOKORO_DIR="$HOME/.nodeava/kokoro-fastapi"
 KOKORO_VERSION="v0.2.4"
+KOKORO_MODEL_URL="https://github.com/remsky/Kokoro-FastAPI/releases/download/v0.1.4/kokoro-v1_0.pth"
+ORCH_DIR="$PROJECT_DIR/services/orchestrator"
 
 echo "=== NodeAva macOS Setup ==="
 echo ""
@@ -84,6 +86,17 @@ else
   echo "whisper-server: installed"
 fi
 
+# 5b. ffmpeg (whisper-server shells out to it for audio decoding)
+echo ""
+echo "--- ffmpeg ---"
+if command -v ffmpeg &>/dev/null; then
+  echo "ffmpeg: OK"
+else
+  echo "Installing ffmpeg..."
+  brew install ffmpeg
+  echo "ffmpeg: installed"
+fi
+
 # 6. Python and uv
 echo ""
 echo "--- Python + uv ---"
@@ -142,6 +155,38 @@ cd "$KOKORO_DIR"
 uv sync
 cd "$PROJECT_DIR"
 echo "Kokoro-FastAPI: dependencies installed"
+
+# 8c. Orchestrator (FastAPI on :8082). Docker runs this in a container; on
+# native macOS we install it into a local venv so start-mac.sh can launch it.
+echo ""
+echo "--- Orchestrator ---"
+if [ -x "$ORCH_DIR/.venv/bin/python" ]; then
+  echo "Orchestrator venv: OK"
+else
+  echo "Creating orchestrator venv (Python 3.12)..."
+  if ! command -v python3.12 &>/dev/null && ! brew list python@3.12 &>/dev/null; then
+    brew install python@3.12
+  fi
+  ( cd "$ORCH_DIR" && uv venv --python 3.12 )
+  echo "Installing orchestrator dependencies..."
+  ( cd "$ORCH_DIR" && uv pip install -r requirements.txt -e . )
+  echo "Orchestrator: installed"
+fi
+
+# 8b. Kokoro model weights — the repo ships config.json + voices, but not the .pth
+KOKORO_MODEL_PATH="$KOKORO_DIR/api/src/models/v1_0/kokoro-v1_0.pth"
+if [ -f "$KOKORO_MODEL_PATH" ] && [ -s "$KOKORO_MODEL_PATH" ]; then
+  echo "Kokoro model: OK"
+else
+  echo "Downloading Kokoro v1.0 model (~312 MB)..."
+  mkdir -p "$(dirname "$KOKORO_MODEL_PATH")"
+  if command -v wget &>/dev/null; then
+    wget -q --show-progress -O "$KOKORO_MODEL_PATH" "$KOKORO_MODEL_URL"
+  else
+    curl -L --progress-bar -o "$KOKORO_MODEL_PATH" "$KOKORO_MODEL_URL"
+  fi
+  echo "Kokoro model: downloaded"
+fi
 
 # 9. Ollama startup check and model pull
 echo ""

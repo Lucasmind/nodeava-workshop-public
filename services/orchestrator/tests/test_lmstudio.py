@@ -6,12 +6,14 @@ behavior (catalog discovery + chat "auto" model resolution) when
 llm_backend == "lmstudio".
 """
 import json
+import textwrap
 
 import httpx
 import pytest
 import respx
 from httpx import ASGITransport, AsyncClient
 
+import orchestrator.main as main_module
 from orchestrator.catalog import BrainEntry, Catalog
 from orchestrator.config import Settings
 from orchestrator.events import TokenEvent
@@ -199,6 +201,39 @@ def test_lmstudio_backend_promotes_default_brain(lmstudio_app):
     # When LM Studio is active, the boot default brain is the LM Studio "auto" one.
     assert lmstudio_app.state.catalog.default_brain().id == "lmstudio-auto"
     assert lmstudio_app.state.state_store.get_state()["brain"] == "lmstudio-auto"
+
+
+def test_lmstudio_missing_auto_brain_resets_to_catalog_default(tmp_path, monkeypatch):
+    """Reviewer edge case: if 'lmstudio-auto' is absent from the catalog (a user
+    edited configs/catalog.yml and removed it) while LLM_BACKEND=lmstudio, boot
+    must NOT persist an invalid brain id — it falls back to the validated catalog
+    default and never writes an id the catalog doesn't know."""
+    cat = tmp_path / "catalog.yml"
+    cat.write_text(textwrap.dedent("""
+        brains:
+          - {id: qwen3-4b-instruct, label: Q, kind: ollama, model: "qwen3:4b-instruct", default: true}
+        voices:
+          - {id: bella, label: B, kokoro_voice: af_bella, default: true}
+        avatars:
+          - {id: ava, label: A, glb_path: /a.glb, default: true}
+        personalities:
+          - {id: default, label: D, system_prompt: hi, default: true}
+    """))
+    monkeypatch.setattr(main_module, "_REPO_CATALOG", cat)
+    # Pre-seed persisted state with a (stale) non-LM-Studio brain selection.
+    state = tmp_path / "state.json"
+    state.write_text(json.dumps({
+        "brain": "qwen3-4b-instruct", "voice": "bella", "avatar": "ava",
+        "personality": "default", "tools": {"web_search": False, "wiki": True},
+    }))
+    settings = Settings(state_path=str(state), llm_backend="lmstudio", lmstudio_url=LMS)
+
+    app = create_app(settings=settings)  # must not raise
+
+    active = app.state.state_store.get_state()["brain"]
+    assert active != "lmstudio-auto"        # the missing id is never persisted
+    app.state.catalog.brain(active)         # resolvable — no CatalogError
+    assert active == "qwen3-4b-instruct"    # fell back to the catalog default
 
 
 @respx.mock

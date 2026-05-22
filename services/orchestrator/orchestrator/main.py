@@ -123,8 +123,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # boot-default brain follow the active backend.
     lmstudio = LMStudioBackend(base_url=settings.lmstudio_url)
     app.state.lmstudio = lmstudio
+    lmstudio_default_ok = False
     if settings.llm_backend == "lmstudio":
-        _promote_brain_default(catalog, "lmstudio-auto")
+        lmstudio_default_ok = _promote_brain_default(catalog, "lmstudio-auto")
         app.state.residency = lmstudio  # duck-typed: exposes async query()
     else:
         app.state.residency = OllamaResidency(base_url=settings.ollama_url)
@@ -132,19 +133,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.state_store = StateStore(path=settings.state_path, catalog=catalog)
 
     # If LM Studio is active but the persisted brain is a stale non-LM-Studio
-    # selection (e.g. an Ollama brain from a previous run), reset it to the LM
-    # Studio default so chat doesn't route to an offline backend.
+    # selection (e.g. an Ollama brain from a previous run), reset it so chat
+    # doesn't route to a possibly-offline backend. Reset to "lmstudio-auto" only
+    # when it actually exists in the catalog (a user may have edited
+    # configs/catalog.yml and removed it); otherwise fall back to the validated
+    # catalog default. We never write an id the catalog doesn't know.
     if settings.llm_backend == "lmstudio":
+        target = "lmstudio-auto" if lmstudio_default_ok else catalog.default_brain().id
         try:
-            current = catalog.brain(app.state.state_store.get_state()["brain"])
-            needs_reset = current.kind != "lmstudio"
-        except Exception:
-            needs_reset = True
-        if needs_reset:
+            current_id = app.state.state_store.get_state()["brain"]
+            needs_reset = catalog.brain(current_id).kind != "lmstudio"
+        except CatalogError:
+            current_id, needs_reset = None, True
+        if needs_reset and current_id != target:
             try:
-                app.state.state_store.set_state("brain", "lmstudio-auto")
-            except Exception as e:  # pragma: no cover - defensive
-                log.warning("could not set LM Studio default brain: %s", e)
+                app.state.state_store.set_state("brain", target)
+            except (ValueError, CatalogError) as e:  # pragma: no cover - defensive
+                log.warning("could not set LM Studio default brain '%s': %s", target, e)
 
     _register_builtin_tools(settings)
     app.include_router(health.router)

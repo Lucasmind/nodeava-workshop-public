@@ -1,0 +1,12 @@
+Write a wiki page titled "{title}" for NodeAva's `wiki/concepts/{slug}.md`.
+
+Source material:
+
+{sources}
+
+The page should explain the concept clearly: what it is, why NodeAva uses
+it, how it fits into the pipeline. Include specific model names, port
+numbers, or file paths when they appear in the source material. Cross-link
+to related concept/entity pages where natural.
+
+Output ONLY the markdown body of the page, starting with a `# {title}` heading.

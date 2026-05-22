@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lab 1 · The Brain (Local LLM)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+
+<header class="lab-header">
+  <a class="home" href="index.html">← Workshop Lab</a>
+  <h1>Lab 1 · The Brain</h1>
+  <span class="step-tag">POST /api/ollama/v1/chat/completions</span>
+</header>
+
+<main>
+
+<div id="preflight" class="preflight checking">Checking services…</div>
+
+<section class="intro">
+  <b>What you're testing:</b> Ollama running on your host machine,
+  serving <code>qwen3:4b-instruct</code> <b>directly</b> (this lab bypasses
+  the orchestrator so you measure raw LLM latency — Lab 4 demos the
+  orchestrator). This is the cognition layer — the part that decides
+  what to say.
+  <span class="what-youll-see">
+    <b>What you'll see:</b> tokens streamed one chunk at a time (not a wall
+    of text). Watch <b>TTFT</b> (time to first token — the lag before the
+    first letter appears) and <b>tokens/sec</b> (the speed once it's flowing).
+    On a typical workshop GPU, expect TTFT 300-900 ms and 30-60 tok/s.
+  </span>
+</section>
+
+<div class="lab-body">
+
+  <div class="panel">
+    <h2>Try the model</h2>
+
+    <label for="prompt">Prompt</label>
+    <textarea id="prompt" placeholder="Ask the model something. Keep it short for the demo.">Explain what a digital human is in two sentences.</textarea>
+
+    <div class="row" style="margin-bottom: 8px;">
+      <span class="preset" data-q="Explain what a digital human is in two sentences.">default</span>
+      <span class="preset" data-q="In one word, what colour is the sky?">terse</span>
+      <span class="preset" data-q="Write a short, vivid story about a robot learning to dance.">creative</span>
+      <span class="preset" data-q="Explain how a CPU works like I'm 5.">explain like I'm 5</span>
+      <span class="preset" data-q="What's the capital of France? Answer with just the city name.">trivia</span>
+    </div>
+
+    <div class="row">
+      <button id="go">Run</button>
+      <button id="clear" class="secondary">Clear</button>
+    </div>
+
+    <details class="controls">
+      <summary>⚙ Experiment knobs</summary>
+      <div class="controls-body">
+        <div class="controls-grid">
+          <div class="control">
+            <label for="model">Model</label>
+            <select id="model"><option value="qwen3:4b-instruct">qwen3:4b-instruct (loading…)</option></select>
+          </div>
+          <div class="control">
+            <label for="temp">Temperature <span style="color:var(--text-dim)">(0=deterministic, 2=wild)</span></label>
+            <div class="slider-row">
+              <input type="range" id="temp" min="0" max="2" step="0.05" value="0.8">
+              <span class="val" id="temp-val">0.80</span>
+            </div>
+          </div>
+          <div class="control">
+            <label for="top_p">Top-p <span style="color:var(--text-dim)">(nucleus sampling)</span></label>
+            <div class="slider-row">
+              <input type="range" id="top_p" min="0" max="1" step="0.05" value="0.9">
+              <span class="val" id="top_p-val">0.90</span>
+            </div>
+          </div>
+          <div class="control">
+            <label for="max_tokens">Max tokens</label>
+            <input type="number" id="max_tokens" min="1" max="4096" step="1" value="256">
+          </div>
+          <div class="control full">
+            <label for="sys">System prompt <span style="color:var(--text-dim)">(empty = none — try "You are a grumpy pirate.")</span></label>
+            <textarea id="sys" class="compact" placeholder="(leave empty for no system prompt)"></textarea>
+          </div>
+        </div>
+        <label class="check-row">
+          <input type="checkbox" id="stream" checked> stream tokens (uncheck to see total latency only)
+        </label>
+      </div>
+    </details>
+
+    <div class="chips">
+      <span class="chip" id="chip-ttft" data-label="TTFT">TTFT <b>—</b></span>
+      <span class="chip" id="chip-total" data-label="total">total <b>—</b></span>
+      <span class="chip" id="chip-tps" data-label="tok/s">tok/s <b>—</b></span>
+      <span class="chip" id="chip-tokens" data-label="tokens">tokens <b>—</b></span>
+    </div>
+
+    <h2 style="margin-top: 24px;">Model output</h2>
+    <div id="out" class="output"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Console</h2>
+    <div id="console" class="console"></div>
+  </div>
+
+</div>
+
+<nav class="lab-nav">
+  <a href="index.html">← back to all labs</a>
+  <a class="next" href="02-stt.html">Lab 2 · The Ears →</a>
+</nav>
+
+</main>
+
+<script src="_shared.js"></script>
+<script>
+const $   = (id) => document.getElementById(id);
+const out = $("out");
+const con = $("console");
+
+NA.preflight("preflight", ["ollama"]);
+
+// Populate model dropdown from the host's Ollama
+(async () => {
+  const models = await NA.listOllamaModels();
+  if (!models.length) return;
+  NA.fillSelect($("model"), models.map(m => ({
+    value: m.name, label: m.name, selected: m.name === "qwen3:4b-instruct",
+  })));
+})();
+
+// Live value displays for sliders
+NA.bindSlider($("temp"),  $("temp-val"),  (v) => Number(v).toFixed(2));
+NA.bindSlider($("top_p"), $("top_p-val"), (v) => Number(v).toFixed(2));
+
+// Preset prompt chips
+document.querySelectorAll(".preset").forEach(p => {
+  p.onclick = () => { $("prompt").value = p.dataset.q; };
+});
+
+$("clear").onclick = () => {
+  out.textContent = "";
+  NA.clearConsole(con);
+  NA.clearChips("chip-ttft", "chip-total", "chip-tps", "chip-tokens");
+};
+
+$("go").onclick = async () => {
+  const prompt = $("prompt").value.trim();
+  if (!prompt) return;
+  const streaming = $("stream").checked;
+  out.textContent = "";
+  NA.clearConsole(con);
+  NA.clearChips("chip-ttft", "chip-total", "chip-tps", "chip-tokens");
+  $("go").disabled = true;
+
+  NA.logLine(con, "→ POST /api/ollama/v1/chat/completions  (stream=" + streaming + ")", "event");
+  NA.logLine(con, "    body.messages = [{role: 'user', content: <prompt>}]", "");
+
+  const t0 = NA.now();
+  let tFirst = 0;
+  let tokenCount = 0;
+  let charCount = 0;
+
+  try {
+    // Build messages — prepend a system message only if one is set.
+    const sysPrompt = $("sys").value.trim();
+    const messages = [];
+    if (sysPrompt) messages.push({ role: "system", content: sysPrompt });
+    messages.push({ role: "user", content: prompt });
+
+    const resp = await fetch("/api/ollama/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: $("model").value,
+        messages,
+        stream: streaming,
+        temperature: Number($("temp").value),
+        top_p: Number($("top_p").value),
+        max_tokens: Number($("max_tokens").value),
+      }),
+    });
+
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+
+    if (streaming) {
+      for await (const msg of NA.parseSSE(resp)) {
+        if (msg.data === "[DONE]") { NA.logLine(con, "← [DONE]", "ok"); break; }
+        if (msg.event !== "message") {
+          NA.logLine(con, "  event: " + msg.event, "event");
+          continue;
+        }
+        const delta = msg.data.choices?.[0]?.delta?.content;
+        if (delta) {
+          if (tFirst === 0) {
+            tFirst = NA.now() - t0;
+            NA.setChip("chip-ttft", "TTFT", NA.ms(tFirst), "success");
+            NA.logLine(con, "  ← first token at " + NA.ms(tFirst), "ok");
+          }
+          out.textContent += delta;
+          tokenCount += 1;
+          charCount += delta.length;
+        }
+      }
+    } else {
+      const json = await resp.json();
+      const text = json.choices?.[0]?.message?.content || "";
+      out.textContent = text;
+      tokenCount = Math.ceil(text.length / 4); // rough estimate
+      charCount = text.length;
+      NA.logLine(con, "← non-streaming response (" + text.length + " chars)", "ok");
+    }
+
+    const tTotal = NA.now() - t0;
+    NA.setChip("chip-total", "total", NA.sec(tTotal), "success");
+    NA.setChip("chip-tokens", "tokens", String(tokenCount));
+    const tokWindow = streaming && tFirst > 0 ? tTotal - tFirst : tTotal;
+    if (tokenCount > 0 && tokWindow > 0) {
+      NA.setChip("chip-tps", "tok/s", (tokenCount / (tokWindow / 1000)).toFixed(1), "success");
+    }
+    NA.logLine(con, "total " + NA.ms(tTotal) + ", ~" + tokenCount + " tokens, ~" + charCount + " chars", "ok");
+  } catch (e) {
+    NA.logLine(con, "ERROR: " + e.message, "err");
+    out.textContent = "(error — see console)";
+  } finally {
+    $("go").disabled = false;
+  }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "digital-avatar-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@met4citizen/talkinghead": "^1.7.0",
+    "@ricky0123/vad-web": "^0.0.30",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

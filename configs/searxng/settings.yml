@@ -1,0 +1,39 @@
+# SearXNG minimal config for the workshop orchestrator.
+# Default settings are inherited from SearXNG's bundled defaults.yml;
+# we only override what we need.
+
+use_default_settings: true
+
+general:
+  instance_name: "NodeAva Workshop SearXNG"
+  contact_url: false
+  privacypolicy_url: false
+  donation_url: false
+  enable_metrics: false
+
+server:
+  # The bind address inside the container — the entire container is on
+  # the workshop Docker network; do not expose this to the host.
+  bind_address: "0.0.0.0"
+  base_url: "http://searxng:8080/"
+  secret_key: "workshop-default-secret-please-rotate"
+  limiter: true
+  image_proxy: false
+  default_locale: "en"
+
+ui:
+  default_theme: simple
+
+search:
+  # CRITICAL — the JSON format must be enabled for the orchestrator's
+  # browser.search tool. Default SearXNG only enables 'html'.
+  formats:
+    - html
+    - json
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+
+outgoing:
+  request_timeout: 10.0
+  max_request_timeout: 15.0

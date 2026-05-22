@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lab 6 · The Whole Body (Full Pipeline)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="_shared.css">
+<style>
+  .stages {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 14px 0 18px;
+  }
+  .stage {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+  }
+  .stage .name {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+  }
+  .stage .val {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 18px;
+    color: var(--text);
+    font-weight: 600;
+    margin-top: 6px;
+  }
+  .stage.running .val { color: var(--warning); }
+  .stage.done    .val { color: var(--success); }
+  .stage.error   .val { color: var(--danger); }
+  @media (max-width: 600px) {
+    .stages { grid-template-columns: repeat(2, 1fr); }
+  }
+  .transcript-box, .reply-box {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-top: 10px;
+    min-height: 50px;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+
+<header class="lab-header">
+  <a class="home" href="index.html">← Workshop Lab</a>
+  <h1>Lab 6 · The Whole Body</h1>
+  <span class="step-tag">mic → STT → LLM → TTS</span>
+</header>
+
+<main>
+
+<div id="preflight" class="preflight checking">Checking services…</div>
+
+<section class="intro">
+  <b>What you're testing:</b> the full digital-human voice loop. You
+  speak, Whisper transcribes, the orchestrator + LLM compose a reply,
+  Kokoro speaks it. Without the avatar this is still a complete digital
+  conversational agent.
+  <span class="what-youll-see">
+    <b>What you'll see:</b> a stage-by-stage latency breakdown. On a
+    well-tuned GPU laptop the whole chain is ~1.5-3 seconds end-to-end.
+    Notice where the time goes — that's the latency budget you'd have
+    to spend on streaming + sentence chunking to make it feel
+    conversational instead of walkie-talkie.
+  </span>
+</section>
+
+<div class="lab-body" style="grid-template-columns: 1fr;">
+
+  <div class="panel">
+    <h2>Speak, then listen</h2>
+
+    <details class="controls">
+      <summary>⚙ Pipeline knobs</summary>
+      <div class="controls-body">
+        <div class="controls-grid">
+          <div class="control">
+            <label for="brain">Brain (model)</label>
+            <select id="brain"></select>
+          </div>
+          <div class="control">
+            <label for="voice">Voice</label>
+            <select id="voice"></select>
+          </div>
+        </div>
+        <label class="check-row">
+          <input type="checkbox" id="text-mode"> text-input mode (skip mic + STT — type your message instead)
+        </label>
+      </div>
+    </details>
+
+    <div id="text-input-row" class="row" style="display: none;">
+      <textarea id="text-msg" placeholder="Type a message, then click Send →" style="flex:1; min-height: 60px;"></textarea>
+      <button id="send-text">Send</button>
+    </div>
+
+    <div class="row" id="mic-row">
+      <button id="rec">● Record</button>
+      <button id="stop" disabled>■ Stop</button>
+      <span id="dur" class="chip">duration <b>—</b></span>
+    </div>
+
+    <div class="stages">
+      <div class="stage" id="stage-stt"><div class="name">STT (Whisper)</div><div class="val">—</div></div>
+      <div class="stage" id="stage-llm"><div class="name">LLM (Ollama)</div><div class="val">—</div></div>
+      <div class="stage" id="stage-tts"><div class="name">TTS (Kokoro)</div><div class="val">—</div></div>
+      <div class="stage" id="stage-total"><div class="name">Total wall-clock</div><div class="val">—</div></div>
+    </div>
+
+    <h2 style="margin-top: 12px;">You said</h2>
+    <div id="transcript" class="transcript-box"></div>
+
+    <h2 style="margin-top: 16px;">Ava replies</h2>
+    <div id="reply" class="reply-box"></div>
+
+    <div class="row" style="margin-top: 14px;">
+      <audio id="player" controls style="width: 100%;"></audio>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Console</h2>
+    <div id="console" class="console"></div>
+  </div>
+
+</div>
+
+<nav class="lab-nav">
+  <a href="05-tools.html">← Lab 5 · The Hands</a>
+  <a class="next" href="/">Take the full app for a spin →</a>
+</nav>
+
+</main>
+
+<script src="_shared.js"></script>
+<script>
+const $       = (id) => document.getElementById(id);
+const con     = $("console");
+const player  = $("player");
+const tx      = $("transcript");
+const reply   = $("reply");
+
+NA.preflight("preflight", ["stt", "llm", "tts"]);
+
+// Populate brain + voice dropdowns from orchestrator catalog, then wire swaps
+(async () => {
+  try {
+    const [stR, catR] = await Promise.all([fetch("/api/orch/v1/state"), fetch("/api/orch/v1/catalog")]);
+    const st = await stR.json(), cat = await catR.json();
+    NA.fillSelect($("brain"), (cat.brains || []).map(b => ({
+      value: b.id, label: b.label, selected: b.id === st.active.brain,
+    })));
+    NA.fillSelect($("voice"), (cat.voices || []).map(v => ({
+      value: v.id, label: v.label, selected: v.id === st.active.voice,
+    })));
+  } catch (e) { /* fall back to defaults */ }
+})();
+async function swap(kind, id) {
+  await fetch("/api/orch/v1/swap", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, id }),
+  }).catch(() => {});
+}
+$("brain").onchange = (e) => swap("brain", e.target.value);
+$("voice").onchange = (e) => swap("voice", e.target.value);
+
+// Text-input mode toggle — show/hide mic vs textarea
+$("text-mode").onchange = (e) => {
+  $("mic-row").style.display       = e.target.checked ? "none" : "";
+  $("text-input-row").style.display = e.target.checked ? "" : "none";
+  // STT stage is irrelevant in text mode
+  if (e.target.checked) setStage("stt", "(skipped)", "");
+  else setStage("stt", "—", "");
+};
+
+function setStage(id, label, state) {
+  const el = $("stage-" + id);
+  el.className = "stage " + (state || "");
+  el.querySelector(".val").textContent = label;
+}
+
+let audioCtx = null;
+let mediaStream = null;
+let recorder = null;
+let chunks = [];
+let recStart = 0;
+let timer = null;
+
+$("rec").onclick = async () => {
+  tx.textContent = ""; reply.textContent = "";
+  NA.clearConsole(con);
+  ["stt", "llm", "tts", "total"].forEach(s => setStage(s, "—", ""));
+  NA.setChip("dur", "duration", "0.0 s");
+
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
+    NA.logLine(con, "✓ mic granted", "ok");
+  } catch (e) { NA.logLine(con, "✗ mic denied: " + e.message, "err"); return; }
+
+  recorder = new MediaRecorder(mediaStream);
+  chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = runPipeline;
+  recorder.start();
+  recStart = NA.now();
+  NA.logLine(con, "● recording…", "event");
+  $("rec").disabled = true; $("stop").disabled = false;
+  timer = setInterval(() => NA.setChip("dur", "duration", ((NA.now() - recStart) / 1000).toFixed(1) + " s"), 100);
+};
+
+$("stop").onclick = () => {
+  if (!recorder) return;
+  clearInterval(timer);
+  recorder.stop();
+  mediaStream.getTracks().forEach(t => t.stop());
+  $("rec").disabled = false; $("stop").disabled = true;
+};
+
+// Text-mode entry point — skip STT entirely, run LLM + TTS for a typed msg
+$("send-text").onclick = async () => {
+  const msg = $("text-msg").value.trim();
+  if (!msg) return;
+  tx.textContent = msg; $("reply").textContent = "";
+  NA.clearConsole(con);
+  setStage("stt", "(skipped — text mode)", "");
+  setStage("llm", "—", ""); setStage("tts", "—", ""); setStage("total", "—", "");
+  $("send-text").disabled = true;
+  try {
+    await runLlmAndTts(msg, NA.now());
+  } finally {
+    $("send-text").disabled = false;
+  }
+};
+
+async function runPipeline() {
+  const tPipeStart = NA.now();
+  const recDur = (NA.now() - recStart) / 1000;
+  NA.logLine(con, "■ stopped — " + recDur.toFixed(2) + "s of audio", "event");
+
+  const nativeBlob = new Blob(chunks, { type: chunks[0]?.type || "audio/webm" });
+  const wavBlob = await blobToWav(nativeBlob);
+  NA.logLine(con, "  WAV ready (" + NA.fmtBytes(wavBlob.size) + ")", "");
+
+  // ── Stage 1 — STT ──────────────────────────────────────────────────
+  setStage("stt", "running…", "running");
+  const t1 = NA.now();
+  let transcript = "";
+  try {
+    const fd = new FormData();
+    fd.append("file", wavBlob, "rec.wav"); fd.append("model", "base.en");
+    const resp = await fetch("/api/stt/v1/audio/transcriptions", { method: "POST", body: fd });
+    if (!resp.ok) throw new Error("STT HTTP " + resp.status);
+    const json = await resp.json();
+    transcript = (json.text || "").trim();
+    const dt = NA.now() - t1;
+    setStage("stt", NA.ms(dt), "done");
+    tx.textContent = transcript || "(silence)";
+    NA.logLine(con, "STT  " + NA.ms(dt) + "  \"" + transcript + "\"", "ok");
+  } catch (e) {
+    setStage("stt", "fail", "error");
+    NA.logLine(con, "STT error: " + e.message, "err");
+    return;
+  }
+
+  if (!transcript) { NA.logLine(con, "  empty transcript — nothing to ask", "err"); return; }
+
+  await runLlmAndTts(transcript, tPipeStart, recDur);
+}
+
+// Stages 2 + 3 — extracted so text-mode (skip STT) can call it directly.
+// recDur is the mic-held seconds; null/undefined means text-input mode.
+async function runLlmAndTts(transcript, tPipeStart, recDur) {
+  // ── Stage 2 — LLM ──────────────────────────────────────────────────
+  setStage("llm", "running…", "running");
+  const t2 = NA.now();
+  let replyText = "";
+  try {
+    const resp = await fetch("/api/llm/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: transcript }],
+        stream: true,
+      }),
+    });
+    if (!resp.ok) throw new Error("LLM HTTP " + resp.status);
+    let tTTFT = 0;
+    for await (const msg of NA.parseSSE(resp)) {
+      if (msg.data === "[DONE]") break;
+      if (msg.event !== "message") continue;
+      const d = msg.data.choices?.[0]?.delta?.content;
+      if (d) {
+        if (tTTFT === 0) tTTFT = NA.now() - t2;
+        replyText += d;
+        reply.textContent = replyText;
+      }
+    }
+    const dt = NA.now() - t2;
+    setStage("llm", NA.ms(dt), "done");
+    NA.logLine(con, "LLM  " + NA.ms(dt) + "  (TTFT " + NA.ms(tTTFT) + ", " + replyText.length + " chars)", "ok");
+  } catch (e) {
+    setStage("llm", "fail", "error");
+    NA.logLine(con, "LLM error: " + e.message, "err");
+    return;
+  }
+
+  // ── Stage 3 — TTS ──────────────────────────────────────────────────
+  setStage("tts", "running…", "running");
+  const t3 = NA.now();
+  try {
+    // Find a voice — use current orchestrator voice if available
+    let voice = "af_bella";
+    try {
+      const sr = await fetch("/api/orch/v1/state");
+      if (sr.ok) {
+        const sj = await sr.json();
+        const cr = await fetch("/api/orch/v1/catalog");
+        if (cr.ok) {
+          const cj = await cr.json();
+          const v = (cj.voices || []).find(x => x.id === sj.active.voice);
+          if (v) voice = v.kokoro_voice;
+        }
+      }
+    } catch (e) { /* fall back */ }
+
+    const resp = await fetch("/api/tts/dev/captioned_speech", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "kokoro",
+        input: replyText,
+        voice: voice,
+        response_format: "pcm",
+        stream: false,
+        return_timestamps: false,
+      }),
+    });
+    if (!resp.ok) throw new Error("TTS HTTP " + resp.status);
+    const json = await resp.json();
+    const pcm = NA.b64ToBytes(json.audio || "");
+    const wav = NA.pcmToWavBlob(pcm, 24000, 1, 16);
+    player.src = URL.createObjectURL(wav);
+    const dt = NA.now() - t3;
+    setStage("tts", NA.ms(dt), "done");
+    NA.logLine(con, "TTS  " + NA.ms(dt) + "  (voice=" + voice + ", " + NA.fmtBytes(pcm.byteLength) + " PCM)", "ok");
+    player.play().catch(() => { /* user must click */ });
+  } catch (e) {
+    setStage("tts", "fail", "error");
+    NA.logLine(con, "TTS error: " + e.message, "err");
+    return;
+  }
+
+  const tTotal = NA.now() - tPipeStart;
+  setStage("total", NA.ms(tTotal), "done");
+  const suffix = (recDur != null) ? " (mic was held " + recDur.toFixed(2) + "s)" : " (text-mode, no STT)";
+  NA.logLine(con, "── pipeline total: " + NA.ms(tTotal) + suffix, "ok");
+}
+
+async function blobToWav(blob) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  const buf = await blob.arrayBuffer();
+  const audioBuf = await audioCtx.decodeAudioData(buf);
+  const target = 16000;
+  const src = audioBuf.getChannelData(0);
+  let pcmFloat;
+  if (audioBuf.sampleRate === target) pcmFloat = src;
+  else {
+    const ratio = audioBuf.sampleRate / target;
+    const outLen = Math.floor(src.length / ratio);
+    pcmFloat = new Float32Array(outLen);
+    for (let i = 0; i < outLen; i++) pcmFloat[i] = src[Math.floor(i * ratio)];
+  }
+  const pcm16 = new Int16Array(pcmFloat.length);
+  for (let i = 0; i < pcmFloat.length; i++) {
+    const s = Math.max(-1, Math.min(1, pcmFloat[i]));
+    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return NA.pcmToWavBlob(pcm16.buffer, target, 1, 16);
+}
+</script>
+</body>
+</html>

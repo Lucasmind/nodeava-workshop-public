@@ -1,0 +1,446 @@
+/* Plan #8 dashboard — drawer + panels.
+ * All classes prefixed with .nv-dash- to avoid collision with existing
+ * frontend/src/style.css.
+ */
+
+/* Floating toggle button (top-right) */
+.nv-dash-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(30, 41, 59, 0.85);
+  color: #e2e8f0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: background 150ms;
+  backdrop-filter: blur(6px);
+}
+.nv-dash-toggle:hover {
+  background: rgba(51, 65, 85, 0.95);
+}
+.nv-dash-toggle-icon {
+  display: inline-block;
+  transition: transform 250ms ease-out;
+}
+.nv-dash-toggle[aria-expanded="true"] .nv-dash-toggle-icon {
+  transform: rotate(180deg);
+}
+
+/* Drawer (slides in from right) */
+.nv-dash-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  height: 100vh;
+  z-index: 999;
+  background: #0d1117;
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #334155;
+  transform: translateX(100%);
+  transition: transform 250ms ease-out;
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+}
+.nv-dash-drawer[aria-hidden="false"] {
+  transform: translateX(0);
+}
+
+@media (max-width: 768px) {
+  .nv-dash-drawer { width: 100vw; }
+}
+
+/* Drawer header */
+.nv-dash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 16px;
+  border-bottom: 1px solid #334155;
+  background: #161b22;
+}
+.nv-dash-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.nv-dash-hint {
+  font-size: 11px;
+  opacity: 0.55;
+}
+.nv-dash-hint kbd {
+  background: #1e293b;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px;
+}
+
+/* Controls panel (top ~40%) */
+.nv-dash-controls {
+  flex: 0 0 auto;
+  padding: 12px 16px;
+  border-bottom: 2px solid #1e3a5f;
+  background: #0f1626;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+/* Flow + Events panel (bottom ~60%) */
+.nv-dash-flow-events {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.nv-dash-flow {
+  flex: 0 0 auto;
+  padding: 12px 16px;
+  background: #0a0f1a;
+  border-bottom: 1px solid #1e293b;
+}
+.nv-dash-events {
+  flex: 1 1 auto;
+  padding: 8px 12px;
+  background: #000;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-y: auto;
+  color: #94a3b8;
+}
+
+/* Row layout (used by ControlsPanel) */
+.nv-dash-row {
+  margin-bottom: 10px;
+}
+.nv-dash-row-label {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 3px;
+}
+.nv-dash-row-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.nv-dash-row-error {
+  min-height: 14px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #f87171;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+.nv-dash-row-error:not(:empty) {
+  opacity: 1;
+}
+
+/* Select dropdown */
+.nv-dash-select {
+  flex: 1 1 auto;
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.nv-dash-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+.nv-dash-select option:disabled {
+  color: #475569;
+}
+
+/* Chip (residency etc.) */
+.nv-dash-chip {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.nv-dash-chip::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.9;
+}
+.nv-dash-chip-green { background: rgba(16, 185, 129, 0.18); color: #10b981; }
+.nv-dash-chip-yellow { background: rgba(234, 179, 8, 0.18); color: #eab308; }
+.nv-dash-chip-red { background: rgba(239, 68, 68, 0.18); color: #ef4444; }
+.nv-dash-chip-gray { background: rgba(100, 116, 139, 0.18); color: #94a3b8; }
+.nv-dash-chip-blue { background: rgba(59, 130, 246, 0.18); color: #3b82f6; }
+.nv-dash-chip-empty { display: none; }
+
+/* Tool toggle row */
+.nv-dash-tool-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+.nv-dash-tool-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.nv-dash-tool-row input[type="checkbox"] {
+  margin: 0;
+}
+
+/* Event log (Task 7) */
+.nv-dash-events-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #475569;
+  margin-bottom: 4px;
+}
+.nv-dash-events-clear {
+  background: none;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.nv-dash-events-clear:hover {
+  background: #1e293b;
+}
+.nv-dash-event {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nv-dash-event-time {
+  font-weight: 600;
+}
+.nv-dash-event-name {
+  color: #e2e8f0;
+}
+.nv-dash-event-preview {
+  color: #64748b;
+}
+
+/* Flow diagram (Task 8) */
+.nv-dash-flow-header {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #475569;
+  margin-bottom: 6px;
+}
+.nv-dash-lane {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  margin-bottom: 3px;
+  border-radius: 0 3px 3px 0;
+  border-left: 3px solid #475569;
+  background: #1e293b;
+  font-size: 12px;
+  transition: background 200ms, border-color 200ms;
+}
+.nv-dash-lane-glyph {
+  flex: 0 0 18px;
+  text-align: center;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.nv-dash-lane-label {
+  flex: 1 1 auto;
+}
+.nv-dash-lane-status {
+  flex: 0 0 auto;
+  font-size: 11px;
+  opacity: 0.85;
+}
+.nv-dash-lane-sub {
+  background: transparent;
+  border-left-color: #1e293b;
+  font-style: italic;
+  font-size: 11px;
+  opacity: 0.85;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.nv-dash-lane-branch {
+  margin-left: 16px;
+}
+
+/* State color variants */
+.nv-dash-lane-idle   { border-left-color: #475569; }
+.nv-dash-lane-active { border-left-color: #3b82f6; background: #1e2b48; }
+.nv-dash-lane-done   { border-left-color: #10b981; background: #1e3a2e; }
+.nv-dash-lane-tool   { border-left-color: #c084fc; background: #2d1b3d; }
+.nv-dash-lane-error  { border-left-color: #ef4444; background: #3d1818; }
+
+/* Per-lane timing chip */
+.nv-dash-lane-chip {
+  margin-left: 0.5em;
+  padding: 0 0.4em;
+  font-size: 0.78em;
+  font-variant-numeric: tabular-nums;
+  color: var(--nv-dash-muted, #888);
+  background: var(--nv-dash-chip-bg, rgba(0,0,0,0.08));
+  border-radius: 0.4em;
+  min-width: 2.6em;
+  text-align: center;
+  display: inline-block;
+}
+.nv-dash-lane-chip:empty {
+  display: none;
+}
+
+/* Benchmark panel (Plan #10 Task 3) */
+.nv-dash-bench-header { font-weight: 600; margin: 1em 0 0.4em; font-size: 0.85em; opacity: 0.7; letter-spacing: 0.05em; }
+.nv-dash-bench-btn { width: 100%; padding: 0.5em; margin-bottom: 0.5em; cursor: pointer; }
+.nv-dash-bench-btn:disabled { cursor: wait; opacity: 0.6; }
+.nv-dash-bench-status { font-size: 0.85em; opacity: 0.7; min-height: 1.2em; margin-bottom: 0.5em; }
+.nv-dash-bench-table { width: 100%; border-collapse: collapse; font-size: 0.78em; font-variant-numeric: tabular-nums; }
+.nv-dash-bench-table th, .nv-dash-bench-table td { padding: 0.2em 0.4em; border-bottom: 1px solid rgba(0,0,0,0.1); text-align: right; }
+.nv-dash-bench-table th:first-child, .nv-dash-bench-table td:first-child,
+.nv-dash-bench-table th:nth-child(2), .nv-dash-bench-table td:nth-child(2) { text-align: left; }
+.nv-dash-bench-table caption { caption-side: top; text-align: left; font-size: 0.85em; opacity: 0.6; padding: 0.5em 0; }
+.nv-dash-bench-clear { margin-top: 0.5em; padding: 0.3em 0.6em; font-size: 0.85em; cursor: pointer; }
+
+/* Personality editor (Plan #10 Task 7 — modal-style) */
+.nv-dash-personality-header { font-weight: 600; margin: 1em 0 0.4em; font-size: 0.85em; opacity: 0.7; letter-spacing: 0.05em; }
+.nv-dash-personality-open { width: 100%; padding: 0.5em; cursor: pointer; font-size: 0.9em; }
+.nv-dash-personality-summary { margin-top: 0.5em; font-size: 0.8em; opacity: 0.75; line-height: 1.4; }
+.nv-dash-personality-summary-label { font-weight: 600; opacity: 0.9; }
+.nv-dash-personality-summary-preview { margin-top: 0.2em; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.92em; opacity: 0.7; }
+
+/* Full-page personality editor modal */
+.nv-pers-modal-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.nv-pers-modal-panel {
+  width: min(820px, 90vw);
+  height: min(640px, 80vh);
+  background: white; color: #222;
+  border-radius: 10px;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.4);
+  display: flex; flex-direction: column;
+  padding: 1.2em;
+  gap: 0.8em;
+}
+@media (prefers-color-scheme: dark) {
+  .nv-pers-modal-panel { background: #1f1f1f; color: #eee; }
+}
+.nv-pers-modal-titlebar { display: flex; align-items: center; justify-content: space-between; }
+.nv-pers-modal-title { font-weight: 600; font-size: 1.1em; }
+.nv-pers-modal-close {
+  background: transparent; border: none; cursor: pointer;
+  font-size: 1.3em; line-height: 1; padding: 0.2em 0.5em;
+  color: inherit; opacity: 0.6;
+}
+.nv-pers-modal-close:hover { opacity: 1; }
+.nv-pers-modal-help {
+  font-size: 0.85em; opacity: 0.75; line-height: 1.4;
+  padding: 0.5em 0.7em;
+  background: rgba(0,0,0,0.05);
+  border-radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  .nv-pers-modal-help { background: rgba(255,255,255,0.05); }
+}
+.nv-pers-modal-textarea {
+  flex: 1;
+  width: 100%; box-sizing: border-box;
+  font: 0.95em/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  padding: 0.7em;
+  resize: none;
+  border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.15);
+}
+@media (prefers-color-scheme: dark) {
+  .nv-pers-modal-textarea {
+    background: #111; color: #ddd;
+    border-color: rgba(255,255,255,0.15);
+  }
+}
+.nv-pers-modal-btnrow {
+  display: flex; align-items: center; gap: 0.5em;
+}
+.nv-pers-modal-status { flex: 1; font-size: 0.85em; opacity: 0.7; }
+.nv-pers-modal-btnrow button { padding: 0.5em 1em; cursor: pointer; font-size: 0.9em; }
+.nv-pers-modal-btn-save { font-weight: 600; }
+
+/* Walkthrough overlay (Plan #10 Task 11) */
+.nv-walk-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  pointer-events: auto;
+}
+.nv-walk-svg {
+  position: absolute; inset: 0;
+  pointer-events: none;
+}
+.nv-walk-tooltip {
+  position: fixed;
+  max-width: 320px;
+  background: white; color: #222;
+  padding: 1em 1.2em;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+  font: 0.95em/1.4 -apple-system, system-ui, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  .nv-walk-tooltip { background: #2a2a2a; color: #eee; }
+}
+.nv-walk-tooltip-counter { font-size: 0.8em; opacity: 0.6; margin-bottom: 0.3em; }
+.nv-walk-tooltip-title { font-weight: 600; font-size: 1.05em; margin-bottom: 0.4em; }
+.nv-walk-tooltip-body { margin-bottom: 0.8em; }
+.nv-walk-tooltip-btns { display: flex; gap: 0.4em; }
+.nv-walk-tooltip-btns button { flex: 1; padding: 0.4em; cursor: pointer; }
+.nv-walk-btn-skip { opacity: 0.6; }
+
+/* Walkthrough trigger button (Plan #10 Task 12) — matches .nv-dash-toggle look */
+#nv-walk-trigger {
+  position: fixed;
+  top: 12px;
+  right: 60px;  /* drawer toggle is 36px wide at right:12px, so gap = 12px */
+  z-index: 1000;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(30, 41, 59, 0.85);
+  color: #e2e8f0;
+  cursor: pointer;
+  font: 700 1.1em/1 sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+#nv-walk-trigger:hover {
+  background: rgba(51, 65, 85, 0.95);
+}

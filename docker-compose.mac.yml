@@ -1,0 +1,24 @@
+# Mac overlay — applied via `-f docker-compose.mac.yml` on macOS.
+#
+# Two changes from the base compose:
+#   1. Swap the nginx config on the frontend container to a Mac-aware one
+#      that routes STT/TTS to host.docker.internal (the native services
+#      running outside Docker, accelerated by Metal/MPS).
+#   2. Clear the frontend's depends_on for stt + tts — those services are
+#      NOT started in Docker on Mac, so depends_on would block creation.
+#      We use the !reset YAML tag (compose ≥ 2.24) to remove the inherited
+#      depends_on entirely.
+#
+# Bring up:
+#   docker compose -f docker-compose.yml -f docker-compose.mac.yml \
+#                  up -d orchestrator searxng frontend
+#   bash scripts/start-mac.sh   # then start STT + TTS natively
+#
+# The wizard (scripts/install/08-up-stack.sh) injects this overlay
+# automatically when NODEAVA_PLATFORM=mac.
+
+services:
+  frontend:
+    depends_on: !reset {}
+    volumes:
+      - ./frontend/nginx.mac.conf:/etc/nginx/conf.d/default.conf:ro

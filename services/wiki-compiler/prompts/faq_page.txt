@@ -1,0 +1,13 @@
+Write a wiki FAQ page titled "{title}" for NodeAva's `wiki/faqs/{slug}.md`.
+
+Source material:
+
+{sources}
+
+FAQ pages answer a single specific question — typically of the form "How
+do I..." or "What is...". Keep it tight: opener that restates the
+question, then the answer in 100-200 words. Use a numbered list if the
+answer is a sequence of steps. Use code blocks for shell commands or
+config snippets. Cross-link related pages.
+
+Output ONLY the markdown body, starting with a `# {title}` heading.

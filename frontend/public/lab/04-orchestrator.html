@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lab 4 · The Nervous System (Orchestrator)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="_shared.css">
+<style>
+  .prompt-box {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--text-dim);
+    margin-top: 8px;
+    white-space: pre-wrap;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .meta-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .meta-row b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header class="lab-header">
+  <a class="home" href="index.html">← Workshop Lab</a>
+  <h1>Lab 4 · The Nervous System</h1>
+  <span class="step-tag">/api/orch/v1/{state,catalog,swap}</span>
+</header>
+
+<main>
+
+<div id="preflight" class="preflight checking">Checking services…</div>
+
+<section class="intro">
+  <b>What you're testing:</b> the FastAPI orchestrator that sits between
+  the browser and Ollama. It holds the <i>personality</i> — a system
+  prompt that gets prepended to every chat — and the <i>brain</i> selection
+  (which model to use). The same model under two different personalities
+  produces dramatically different answers; the personality <b>is</b> the
+  program.
+  <span class="what-youll-see">
+    <b>What you'll see:</b> the literal system prompt that's prepended to
+    every chat, the active brain + voice + avatar, and side-by-side
+    responses to the same question under different personalities. Watch
+    how few words of system-prompt drift change the entire tone.
+  </span>
+</section>
+
+<div class="lab-body">
+
+  <div class="panel">
+    <h2>Current state (/v1/state)</h2>
+    <div class="meta-row">
+      <span><b>Brain:</b> <span id="meta-brain">—</span></span>
+      <span><b>Voice:</b> <span id="meta-voice">—</span></span>
+      <span><b>Personality:</b> <span id="meta-pers">—</span></span>
+    </div>
+
+    <details class="controls" open>
+      <summary>⚙ Swap brain + personality</summary>
+      <div class="controls-body">
+        <div class="controls-grid">
+          <div class="control">
+            <label for="brain">Brain (model)</label>
+            <select id="brain"></select>
+          </div>
+          <div class="control">
+            <label for="personality">Personality</label>
+            <select id="personality"></select>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <h2 style="margin-top: 20px;">System prompt being prepended right now</h2>
+    <div id="prompt-box" class="prompt-box">(loading…)</div>
+
+    <label for="user-msg" style="margin-top: 18px;">Try a message</label>
+    <div style="margin-bottom: 8px;">
+      <span class="preset" data-q="Tell me one interesting fact about clocks.">default</span>
+      <span class="preset" data-q="What's the meaning of life?">deep</span>
+      <span class="preset" data-q="How do I cook rice?">how-to</span>
+      <span class="preset" data-q="Roast me.">opinionated</span>
+    </div>
+    <textarea id="user-msg" placeholder="Ask the same question after swapping personalities — watch the tone shift.">Tell me one interesting fact about clocks.</textarea>
+
+    <div class="row">
+      <button id="go">Send</button>
+      <button id="clear" class="secondary">Clear</button>
+    </div>
+
+    <div class="chips">
+      <span class="chip" id="chip-ttft" data-label="TTFT">TTFT <b>—</b></span>
+      <span class="chip" id="chip-total" data-label="total">total <b>—</b></span>
+      <span class="chip" id="chip-tokens" data-label="tokens">tokens <b>—</b></span>
+    </div>
+
+    <h2 style="margin-top: 20px;">Reply</h2>
+    <div id="out" class="output"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Console — events on the wire</h2>
+    <div id="console" class="console"></div>
+  </div>
+
+</div>
+
+<nav class="lab-nav">
+  <a href="03-tts.html">← Lab 3 · The Voice</a>
+  <a class="next" href="05-tools.html">Lab 5 · The Hands →</a>
+</nav>
+
+</main>
+
+<script src="_shared.js"></script>
+<script>
+const $   = (id) => document.getElementById(id);
+const out = $("out");
+const con = $("console");
+const promptBox = $("prompt-box");
+
+let catalog = null;
+let currentPersonalityId = null;
+
+NA.preflight("preflight", ["orch", "llm"]);
+
+async function refresh() {
+  try {
+    const [stRes, catRes] = await Promise.all([
+      fetch("/api/orch/v1/state"),
+      fetch("/api/orch/v1/catalog"),
+    ]);
+    const st = await stRes.json();
+    catalog = await catRes.json();
+
+    $("meta-brain").textContent = st.active.brain || "—";
+    $("meta-voice").textContent = st.active.voice || "—";
+    $("meta-pers").textContent  = st.active.personality || "—";
+    currentPersonalityId = st.active.personality;
+
+    // Brain dropdown
+    NA.fillSelect($("brain"), (catalog.brains || []).map(b => ({
+      value: b.id,
+      label: b.label + (b.available === false ? "  (unavailable)" : ""),
+      selected: b.id === st.active.brain,
+    })));
+
+    // Personality dropdown
+    NA.fillSelect($("personality"), (catalog.personalities || []).map(p => ({
+      value: p.id,
+      label: p.label + (p.default ? "  (default)" : ""),
+      selected: p.id === currentPersonalityId,
+    })));
+
+    // Show the active personality's system prompt
+    const active = (catalog.personalities || []).find(p => p.id === currentPersonalityId);
+    promptBox.textContent = active ? active.system_prompt : "(personality not found)";
+
+  } catch (e) {
+    NA.logLine(con, "state/catalog fetch failed: " + e.message, "err");
+  }
+}
+
+// Preset prompt chips
+document.querySelectorAll(".preset").forEach(p => {
+  p.onclick = () => { $("user-msg").value = p.dataset.q; };
+});
+
+$("brain").onchange = async (e) => {
+  const newId = e.target.value;
+  NA.logLine(con, "→ POST /api/orch/v1/swap  {kind:'brain', id:'" + newId + "'}", "event");
+  try {
+    const resp = await fetch("/api/orch/v1/swap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "brain", id: newId }),
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    NA.logLine(con, "← brain swap ok", "ok");
+    await refresh();
+  } catch (e) {
+    NA.logLine(con, "brain swap failed: " + e.message, "err");
+  }
+};
+
+$("personality").onchange = async (e) => {
+  const newId = e.target.value;
+  NA.logLine(con, "→ POST /api/orch/v1/swap  {kind:'personality', id:'" + newId + "'}", "event");
+  try {
+    const resp = await fetch("/api/orch/v1/swap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "personality", id: newId }),
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    NA.logLine(con, "← swap ok", "ok");
+    await refresh();
+  } catch (e) {
+    NA.logLine(con, "swap failed: " + e.message, "err");
+  }
+};
+
+$("clear").onclick = () => {
+  out.textContent = "";
+  NA.clearConsole(con);
+  NA.clearChips("chip-ttft", "chip-total", "chip-tokens");
+};
+
+$("go").onclick = async () => {
+  const userMsg = $("user-msg").value.trim();
+  if (!userMsg) return;
+  out.textContent = "";
+  NA.clearConsole(con);
+  NA.clearChips("chip-ttft", "chip-total", "chip-tokens");
+  $("go").disabled = true;
+
+  NA.logLine(con, "→ POST /api/llm/v1/chat/completions  (stream=true)", "event");
+  NA.logLine(con, "    personality '" + currentPersonalityId + "' is prepended server-side", "");
+  NA.logLine(con, "    messages = [{role: 'user', content: <userMsg>}]", "");
+  NA.logLine(con, "      (the orchestrator inserts a system message before this one — see the panel above)", "");
+
+  const t0 = NA.now();
+  let tFirst = 0;
+  let tokenCount = 0;
+
+  try {
+    const resp = await fetch("/api/llm/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: userMsg }],
+        stream: true,
+      }),
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+
+    for await (const msg of NA.parseSSE(resp)) {
+      if (msg.data === "[DONE]") { NA.logLine(con, "← [DONE]", "ok"); break; }
+      if (msg.event !== "message") {
+        NA.logLine(con, "  event: " + msg.event, "event");
+        continue;
+      }
+      const delta = msg.data.choices?.[0]?.delta?.content;
+      if (delta) {
+        if (tFirst === 0) {
+          tFirst = NA.now() - t0;
+          NA.setChip("chip-ttft", "TTFT", NA.ms(tFirst), "success");
+        }
+        out.textContent += delta;
+        tokenCount += 1;
+      }
+    }
+
+    const tTotal = NA.now() - t0;
+    NA.setChip("chip-total", "total", NA.sec(tTotal), "success");
+    NA.setChip("chip-tokens", "tokens", String(tokenCount));
+    NA.logLine(con, "total " + NA.ms(tTotal) + ", ~" + tokenCount + " tokens", "ok");
+  } catch (e) {
+    NA.logLine(con, "ERROR: " + e.message, "err");
+  } finally {
+    $("go").disabled = false;
+  }
+};
+
+refresh();
+</script>
+</body>
+</html>

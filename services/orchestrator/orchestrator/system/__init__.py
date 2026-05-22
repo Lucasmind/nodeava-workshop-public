@@ -1,0 +1,1 @@
+"""Plan #7: system-introspection helpers (Ollama residency)."""

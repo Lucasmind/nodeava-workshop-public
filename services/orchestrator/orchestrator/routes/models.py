@@ -16,7 +16,7 @@ async def list_models(request: Request) -> JSONResponse:
         settings.lmstudio_url
         if settings.llm_backend == "lmstudio"
         else settings.ollama_url
-    )
+     ).rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{backend}/v1/models")

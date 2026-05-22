@@ -77,16 +77,21 @@ class LMStudioBackend:
         data = await self._get_models()
         if data is None:
             return {"reachable": False, "loaded": []}
-        loaded = [
-            {
-                "model": (m.get("id") or m.get("key") or ""),
-                "size_bytes": 0,
-                "size_vram_bytes": 0,
-                "residency": "loaded",
-            }
-            for m in data
-            if m.get("state") == "loaded"
-        ]
+         loaded: list[dict[str, Any]] = []
+         for m in data:
+             if m.get("state") != "loaded":
+                 continue
+             mid = m.get("id") or m.get("key") or ""
+             if not mid:
+                 continue
+             loaded.append(
+                 {
+                     "model": mid,
+                     "size_bytes": 0,
+                     "size_vram_bytes": 0,
+                     "residency": "loaded",
+                 }
+             )
         return {"reachable": True, "loaded": loaded}
 
     async def pick_model(self, *, fallback: str) -> str:

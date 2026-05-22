@@ -12,6 +12,7 @@ from orchestrator.catalog import BrainEntry
 from orchestrator.events import ErrorEvent, Event, FinalDoneEvent
 from orchestrator.providers.base import Provider
 from orchestrator.providers.litellm_provider import LiteLLMProvider
+from orchestrator.providers.lmstudio import LMStudioProvider
 from orchestrator.providers.ollama import OllamaProvider
 
 
@@ -39,15 +40,28 @@ def dispatch_for_brain(
     ollama_url: str,
     request_timeout: float,
     api_key: str | None,
+    lmstudio_url: str = "http://host.docker.internal:1234",
+    model_override: str | None = None,
 ) -> Provider:
-    """Construct a Provider for this brain."""
+    """Construct a Provider for this brain.
+
+    `model_override` lets the chat route resolve a brain whose model is "auto"
+    (the LM Studio default brain) to a concrete, currently-loaded model id.
+    """
+    model = model_override or brain.model
     if brain.kind == "ollama":
         return OllamaProvider(
-            base_url=ollama_url, model=brain.model, timeout=request_timeout,
+            base_url=ollama_url, model=model, timeout=request_timeout,
         )
     if brain.kind == "openai-compatible":
         return OllamaProvider(
-            base_url=brain.url, model=brain.model, timeout=request_timeout,
+            base_url=brain.url, model=model, timeout=request_timeout,
+        )
+    if brain.kind == "lmstudio":
+        # Native /api/v0 client. Brains may pin their own url; otherwise the
+        # deploy-wide LM Studio url is used.
+        return LMStudioProvider(
+            base_url=(brain.url or lmstudio_url), model=model, timeout=request_timeout,
         )
     if brain.kind == "cloud-litellm":
         if not api_key:

@@ -29,7 +29,15 @@ log = logging.getLogger("orchestrator.providers.ollama")
 
 
 class OllamaProvider(Provider):
-    """OpenAI-compatible chat client for Ollama."""
+    """OpenAI-compatible chat client for Ollama.
+
+    The chat endpoint path is a class attribute so subclasses (e.g.
+    LMStudioProvider, which targets LM Studio's native /api/v0/chat/completions)
+    can reuse this provider's streaming + tool_call parsing unchanged — the wire
+    format is identical OpenAI-shaped SSE.
+    """
+
+    _CHAT_PATH = "/v1/chat/completions"
 
     def __init__(self, *, base_url: str, model: str, timeout: float = 300.0) -> None:
         self._base_url = base_url.rstrip("/")
@@ -66,7 +74,7 @@ class OllamaProvider(Provider):
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 resp = await client.post(
-                    f"{self._base_url}/v1/chat/completions",
+                    f"{self._base_url}{self._CHAT_PATH}",
                     json=payload,
                 )
                 if resp.status_code >= 400:
@@ -111,7 +119,7 @@ class OllamaProvider(Provider):
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 async with client.stream(
                     "POST",
-                    f"{self._base_url}/v1/chat/completions",
+                    f"{self._base_url}{self._CHAT_PATH}",
                     json=payload,
                 ) as resp:
                     if resp.status_code >= 400:

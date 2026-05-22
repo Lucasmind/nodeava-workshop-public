@@ -13,6 +13,7 @@ from orchestrator.routes import personality as personality_routes
 from orchestrator.routes import state as state_route
 from orchestrator.routes import swap as swap_route
 from orchestrator.state import StateStore
+from orchestrator.system.lmstudio import LMStudioBackend
 from orchestrator.system.residency import OllamaResidency
 from orchestrator import tools as tool_registry
 from orchestrator.tools.browser import BrowserFind, BrowserOpen, BrowserSearch
@@ -59,6 +60,18 @@ def _resolve_catalog_path() -> Path:
 _REPO_CATALOG = _resolve_catalog_path()
 
 
+def _promote_brain_default(catalog, brain_id: str) -> bool:
+    """Plan #11 — make `brain_id` the sole default brain (used when the active
+    backend is LM Studio so the avatar boots on an LM Studio model). Returns
+    True if the brain exists in the catalog."""
+    if not any(b.id == brain_id for b in catalog.brains):
+        log.warning("cannot promote default brain '%s' (not in catalog)", brain_id)
+        return False
+    for b in catalog.brains:
+        b.default = (b.id == brain_id)
+    return True
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Application factory.
 
@@ -103,8 +116,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )],
         )
     app.state.catalog = catalog
+
+    # Plan #11: LM Studio backend (discovery + residency via the native /api/v0
+    # API). Always constructed — it's cheap and the catalog route + chat "auto"
+    # resolution use it whenever llm_backend == "lmstudio". Residency and the
+    # boot-default brain follow the active backend.
+    lmstudio = LMStudioBackend(base_url=settings.lmstudio_url)
+    app.state.lmstudio = lmstudio
+    if settings.llm_backend == "lmstudio":
+        _promote_brain_default(catalog, "lmstudio-auto")
+        app.state.residency = lmstudio  # duck-typed: exposes async query()
+    else:
+        app.state.residency = OllamaResidency(base_url=settings.ollama_url)
+
     app.state.state_store = StateStore(path=settings.state_path, catalog=catalog)
-    app.state.residency = OllamaResidency(base_url=settings.ollama_url)
+
+    # If LM Studio is active but the persisted brain is a stale non-LM-Studio
+    # selection (e.g. an Ollama brain from a previous run), reset it to the LM
+    # Studio default so chat doesn't route to an offline backend.
+    if settings.llm_backend == "lmstudio":
+        try:
+            current = catalog.brain(app.state.state_store.get_state()["brain"])
+            needs_reset = current.kind != "lmstudio"
+        except Exception:
+            needs_reset = True
+        if needs_reset:
+            try:
+                app.state.state_store.set_state("brain", "lmstudio-auto")
+            except Exception as e:  # pragma: no cover - defensive
+                log.warning("could not set LM Studio default brain: %s", e)
 
     _register_builtin_tools(settings)
     app.include_router(health.router)

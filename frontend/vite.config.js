@@ -70,6 +70,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/orch/, ''),
       },
+      // Plan #11: direct LM Studio passthrough for Lab 1's raw model playground.
+      '/api/lmstudio': {
+        target: 'http://localhost:1234',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/lmstudio/, ''),
+      },
     },
   },
   assetsInclude: ['**/*.glb'],

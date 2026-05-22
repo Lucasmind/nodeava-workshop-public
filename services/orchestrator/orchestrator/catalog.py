@@ -18,7 +18,7 @@ class CatalogError(Exception):
     """Raised on any catalog-validation problem."""
 
 
-_VALID_BRAIN_KINDS = {"ollama", "cloud-litellm", "openai-compatible"}
+_VALID_BRAIN_KINDS = {"ollama", "cloud-litellm", "openai-compatible", "lmstudio"}
 
 
 @dataclass
@@ -34,6 +34,10 @@ class BrainEntry:
     # output). The dashboard / frontend uses this to decide whether to wait
     # for </think> before streaming, vs. stream tokens immediately.
     thinks: bool = False
+    # True for brains injected at runtime from LM Studio discovery (Plan #11).
+    # These are replaced wholesale on each catalog refresh, never persisted to
+    # configs/catalog.yml.
+    dynamic: bool = False
 
 
 @dataclass
@@ -91,6 +95,33 @@ class Catalog:
 
     def default_personality(self) -> PersonalityEntry:
         return _default_or_raise(self.personalities, "personality")
+
+    def sync_dynamic_brains(self, models: list[dict]) -> list[BrainEntry]:
+        """Plan #11 — replace LM Studio-discovered brains with the current set.
+
+        `models` is LMStudioBackend.list_models() output. Existing dynamic
+        entries are dropped and rebuilt so unload/rename in LM Studio is
+        reflected. Loaded models sort first (zero load latency). Returns the new
+        dynamic entries so the catalog route can annotate availability without
+        re-probing. Static (catalog.yml) brains are never touched.
+        """
+        self.brains = [b for b in self.brains if not b.dynamic]
+        added: list[BrainEntry] = []
+        for m in sorted(
+            models, key=lambda x: (not x.get("loaded"), str(x.get("id", "")).lower())
+        ):
+            mid = m["id"]
+            entry = BrainEntry(
+                id=f"lmstudio:{mid}",
+                label=mid + ("  (loaded)" if m.get("loaded") else ""),
+                kind="lmstudio",
+                model=mid,
+                thinks=bool(m.get("thinks", False)),
+                dynamic=True,
+            )
+            self.brains.append(entry)
+            added.append(entry)
+        return added
 
     def register_custom_personality(self, system_prompt: str) -> None:
         """Plan #10 — register or overwrite the 'custom' personality entry."""

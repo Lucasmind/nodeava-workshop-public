@@ -17,7 +17,7 @@ async def test_get_state_returns_active_and_system(app_client):
     body = resp.json()
     assert "active" in body
     assert "system" in body
-    assert body["active"]["brain"] == "qwen3-4b"
+    assert body["active"]["brain"] == "qwen3-4b-instruct"
     assert body["system"]["ollama"]["reachable"] is True
     assert body["system"]["ollama"]["loaded"][0]["residency"] == "gpu"
 

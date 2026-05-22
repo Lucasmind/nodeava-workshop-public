@@ -188,6 +188,27 @@ export class ControlsPanel {
       this.brainSel.setChip({ label: 'external', color: 'gray' });
       return;
     }
+    if (brainEntry.kind === 'lmstudio') {
+      // Plan #11: LM Studio reports binary loaded-state (no VRAM split). The
+      // residency snapshot lives under system.ollama (legacy key) regardless
+      // of the active backend.
+      const loadedList = ollama.loaded || [];
+      if (brainEntry.model === 'auto' || !brainEntry.model) {
+        this.brainSel.setChip(
+          loadedList.length
+            ? { label: 'loaded', color: 'green' }
+            : { label: 'auto', color: 'blue' },
+        );
+        return;
+      }
+      const isLoaded = loadedList.some((m) => m.model === brainEntry.model);
+      this.brainSel.setChip(
+        isLoaded
+          ? { label: 'loaded', color: 'green' }
+          : { label: 'not loaded', color: 'gray' },
+      );
+      return;
+    }
     // kind: ollama — look up in loaded list
     const loaded = (ollama.loaded || []).find((m) => m.model === brainEntry.model);
     if (!loaded) {

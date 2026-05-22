@@ -2,6 +2,26 @@ brains:
   # `thinks: true` flags models that emit <think>...</think> reasoning blocks.
   # The frontend gates token-streaming detection on this flag — thinking models
   # buffer until </think> appears, non-thinking models stream immediately.
+  #
+  # ── LM Studio brains (Plan #11) ──────────────────────────────────────────
+  # kind: lmstudio talks LM Studio's NATIVE REST API at <LMSTUDIO_URL>/api/v0.
+  # When LLM_BACKEND=lmstudio (set in docker-compose.yml), the orchestrator
+  # ALSO auto-discovers every model in your LM Studio library at runtime and
+  # adds each as a selectable `lmstudio:<model-id>` brain — so this static list
+  # is just the stable defaults. `lmstudio-auto` follows whatever model you
+  # have loaded in LM Studio; it is promoted to the default brain at startup
+  # when LM Studio is the active backend.
+  - id: lmstudio-auto
+    label: "LM Studio (auto — uses your loaded model)"
+    kind: lmstudio
+    model: auto
+    thinks: false
+  - id: lmstudio-qwen3-4b
+    label: "LM Studio · Qwen3 4B 2507 (fast default)"
+    kind: lmstudio
+    model: qwen/qwen3-4b-2507
+    thinks: false
+  # ── Ollama brains (used when LLM_BACKEND=ollama, the upstream default) ────
   - id: qwen3-4b-instruct
     label: "Qwen3 4B Instruct (default — fast, no reasoning)"
     kind: ollama

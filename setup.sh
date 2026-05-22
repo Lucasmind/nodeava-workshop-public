@@ -166,7 +166,26 @@ else
         open "$DMG"
         fail "After installing Docker Desktop and launching it once, re-run ./setup.sh"
       else
-        fail "Docker Desktop installer not found at $DMG"
+        # No bundled DMG (running from a `git clone` rather than the USB).
+        # Fall back to Homebrew if available, else point at the download.
+        warn "Bundled Docker Desktop installer not present — you're likely running from a git clone, not the USB."
+        if command -v brew >/dev/null 2>&1; then
+          say "Installing Docker Desktop via Homebrew (~5-10 min, ~600 MB)…"
+          if brew install --cask docker; then
+            warn "Docker Desktop installed. LAUNCH IT ONCE from /Applications/ (it needs to grant itself privileged helper perms + accept EULA), then re-run ./setup.sh"
+            exit 0
+          else
+            fail "Brew install failed. Download manually: https://www.docker.com/products/docker-desktop/"
+          fi
+        else
+          warn "Homebrew not installed. Two options to proceed:"
+          warn "  1. Install Homebrew first:  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+          warn "     then re-run ./setup.sh (this will brew install Docker for you)"
+          warn "  2. Or download Docker Desktop directly:"
+          warn "     https://desktop.docker.com/mac/main/$( [[ $PLATFORM_ARCH = arm64 ]] && echo arm64 || echo amd64 )/Docker.dmg"
+          warn "     Launch it once, then re-run ./setup.sh"
+          fail "Install Docker Desktop, then re-run ./setup.sh"
+        fi
       fi
       ;;
     linux|wsl2)
@@ -231,7 +250,26 @@ else
         warn "After launching Ollama once, re-run ./setup.sh"
         exit 0
       else
-        fail "Ollama installer not found at $ZIP"
+        # No bundled ZIP (git clone path). Fall back to Homebrew.
+        warn "Bundled Ollama installer not present — you're likely running from a git clone, not the USB."
+        if command -v brew >/dev/null 2>&1; then
+          say "Installing Ollama via Homebrew…"
+          if brew install ollama; then
+            ok "Ollama installed via brew"
+            say "Starting Ollama (background)…"
+            # brew install ollama gives you the CLI + a service. Start it.
+            brew services start ollama 2>/dev/null || (ollama serve >/tmp/ollama.log 2>&1 &)
+            sleep 2
+          else
+            fail "Brew install ollama failed. Download manually: https://ollama.com/download/mac"
+          fi
+        else
+          warn "Homebrew not installed. Two options:"
+          warn "  1. Install Homebrew, then re-run:  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+          warn "  2. Or download Ollama for macOS directly: https://ollama.com/download/mac"
+          warn "     Launch Ollama.app once (menubar icon), then re-run ./setup.sh"
+          fail "Install Ollama, then re-run ./setup.sh"
+        fi
       fi
       ;;
     linux|wsl2)

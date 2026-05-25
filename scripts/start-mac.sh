@@ -6,12 +6,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 KOKORO_DIR="$HOME/.nodeava/kokoro-fastapi"
+ORCH_DIR="$PROJECT_DIR/services/orchestrator"
 PID_DIR="$PROJECT_DIR/.pids"
 
 # Ports (match Docker setup)
 LLM_PORT=8081
 STT_PORT=8080
 TTS_PORT=8880
+ORCH_PORT=8082
 FRONTEND_PORT=3000
 
 # Model paths (Whisper only; LLM now via Ollama on port 11434)
@@ -29,6 +31,11 @@ if [ ! -f "$WHISPER_MODEL" ]; then
 fi
 if [ ! -d "$KOKORO_DIR" ]; then
   echo "ERROR: Kokoro-FastAPI not found: $KOKORO_DIR"
+  echo "Run ./scripts/setup-mac.sh first."
+  exit 1
+fi
+if [ ! -x "$ORCH_DIR/.venv/bin/python" ]; then
+  echo "ERROR: Orchestrator venv not found: $ORCH_DIR/.venv"
   echo "Run ./scripts/setup-mac.sh first."
   exit 1
 fi
@@ -109,6 +116,26 @@ echo "$TTS_PID" > "$PID_DIR/tts.pid"
 echo "  TTS started (PID $TTS_PID)"
 cd "$PROJECT_DIR"
 
+# --- Start Orchestrator (FastAPI on :8082) ---
+# The Docker compose file runs this in a container; here we launch it from the
+# local venv with paths/URLs rewritten for the host instead of host.docker.internal.
+echo "Starting Orchestrator (port $ORCH_PORT)..."
+cd "$ORCH_DIR"
+OLLAMA_URL="http://localhost:$OLLAMA_PORT" \
+  BIND_HOST=127.0.0.1 \
+  BIND_PORT="$ORCH_PORT" \
+  WIKI_DIR="$PROJECT_DIR/wiki" \
+  RAW_DIR="$PROJECT_DIR/raw" \
+  STATE_PATH="$PROJECT_DIR/state/current.json" \
+  CATALOG_PATH="$PROJECT_DIR/configs/catalog.yml" \
+  WIKI_COMPILER_PATH="$PROJECT_DIR/services/wiki-compiler/compile_wiki.py" \
+  "$ORCH_DIR/.venv/bin/python" -m orchestrator.main \
+  > "$PROJECT_DIR/logs/orchestrator.log" 2>&1 &
+ORCH_PID=$!
+echo "$ORCH_PID" > "$PID_DIR/orchestrator.pid"
+echo "  Orchestrator started (PID $ORCH_PID)"
+cd "$PROJECT_DIR"
+
 # --- Start Frontend (Vite dev server) ---
 echo "Starting Frontend (Vite dev, port $FRONTEND_PORT)..."
 cd "$PROJECT_DIR/frontend"
@@ -121,10 +148,11 @@ cd "$PROJECT_DIR"
 echo ""
 echo "=== NodeAva Running ==="
 echo ""
-echo "  Frontend:  http://localhost:$FRONTEND_PORT"
-echo "  LLM API:   http://localhost:$OLLAMA_PORT (Ollama)"
-echo "  TTS API:   http://localhost:$TTS_PORT"
-echo "  STT API:   http://localhost:$STT_PORT"
+echo "  Frontend:     http://localhost:$FRONTEND_PORT"
+echo "  Orchestrator: http://localhost:$ORCH_PORT"
+echo "  LLM API:      http://localhost:$OLLAMA_PORT (Ollama)"
+echo "  TTS API:      http://localhost:$TTS_PORT"
+echo "  STT API:      http://localhost:$STT_PORT"
 echo ""
 echo "  Logs:      $PROJECT_DIR/logs/"
 echo ""
@@ -133,7 +161,7 @@ echo ""
 
 # Wait for any child to exit — if one dies, report it
 while true; do
-  for service in stt tts frontend; do
+  for service in stt tts orchestrator frontend; do
     pidfile="$PID_DIR/$service.pid"
     if [ -f "$pidfile" ]; then
       pid=$(cat "$pidfile")

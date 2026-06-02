@@ -11,13 +11,13 @@ Browser (localhost:3000)
   └── nginx ──┬── /api/stt/ ──► whisper.cpp (port 8080)        [Vulkan]
               ├── /api/tts/ ──► Kokoro-FastAPI (port 8880)      [CUDA/ROCm]
               └── /api/llm/ ──► Orchestrator (port 8082)
-                                 ├─► LM Studio on host (:1234, native /api/v0)  [default, Plan #11]
-                                 └─► Ollama on host (:11434)                    [LLM_BACKEND=ollama]
+                                 ├─► Ollama on host (:11434)                    [default]
+                                 └─► LM Studio on host (:1234, native /api/v0)  [LLM_BACKEND=lmstudio, Plan #11]
 ```
 
 - **Frontend**: Vite + Three.js + TalkingHead + VAD-web (browser-based orchestrator)
-- **LLM**: LM Studio on host (native `/api/v0` API; whole library auto-discovered) OR
-  Qwen3-4B via Ollama — selected by `LLM_BACKEND` (see `docs/lmstudio-runbook.md`)
+- **LLM**: Qwen3-4B via Ollama on host (default), OR LM Studio (native `/api/v0` API; whole
+  library auto-discovered) — selected by `LLM_BACKEND` (see `docs/lmstudio-runbook.md`)
 - **TTS**: Kokoro-82M via Kokoro-FastAPI (returns PCM + word timestamps)
 - **STT**: Whisper base.en via whisper.cpp (Vulkan)
 - **Orchestrator**: OpenAI-compatible proxy + agentic tool loop + command center backend
@@ -187,7 +187,7 @@ Docker Desktop on macOS runs a Linux VM — no GPU passthrough to Metal/MPS. Doc
 
 ## Plan #11 — LM Studio backend (native API + dynamic discovery)
 
-Full guide: **`docs/lmstudio-runbook.md`**. Selected by `LLM_BACKEND` env (`lmstudio` default | `ollama`).
+Full guide: **`docs/lmstudio-runbook.md`**. Selected by `LLM_BACKEND` env (`ollama` default | `lmstudio` opt-in).
 
 - **New brain kind `lmstudio`** → `LMStudioProvider` (`providers/lmstudio.py`), a 3-line subclass of
   `OllamaProvider` that targets LM Studio's NATIVE endpoint `POST /api/v0/chat/completions`. The wire

@@ -38,9 +38,9 @@ NodeAva ships with a default avatar (sourced from the [TalkingHead](https://gith
 
 ## Prerequisites
 
-**LLM backend — Ollama _or_ LM Studio:**
-- **Ollama** (host install): `curl -fsSL https://ollama.com/install.sh | sh` (Linux/WSL2) or `brew install ollama` (macOS). Setup scripts pull defaults: `bash scripts/setup-linux.sh` / `bash scripts/setup-mac.sh`.
-- **LM Studio** (default, `LLM_BACKEND=lmstudio`): run LM Studio with "Serve on Local Network" enabled. The orchestrator talks its native `/api/v0` API and **auto-discovers your whole model library** into the dashboard's Brain picker. See **`docs/lmstudio-runbook.md`**. _(LM Studio serves the LLM only; TTS stays Kokoro.)_
+**LLM backend — Ollama (default) _or_ LM Studio (opt-in):**
+- **Ollama** (default, host install): `curl -fsSL https://ollama.com/install.sh | sh` (Linux/WSL2) or `brew install ollama` (macOS). Setup scripts pull defaults: `bash scripts/setup-linux.sh` / `bash scripts/setup-mac.sh`.
+- **LM Studio** (opt-in, set `LLM_BACKEND=lmstudio` in `.env`): run LM Studio with "Serve on Local Network" enabled. The orchestrator talks its native `/api/v0` API and **auto-discovers your whole model library** into the dashboard's Brain picker. See **`docs/lmstudio-runbook.md`**. _(LM Studio serves the LLM only; TTS stays Kokoro.)_
 
 **Docker + Compose (Linux/Windows only):**
 - Docker Engine with Compose V2

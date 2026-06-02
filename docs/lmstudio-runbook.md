@@ -1,8 +1,9 @@
 # LM Studio Backend — Runbook (Plan #11)
 
-Switch NodeAva's brain from **Ollama** to **LM Studio**, with a live, auto-discovered
-picker for *every* model in your LM Studio library. The avatar's LLM now runs through
-LM Studio's **native** REST API (`/api/v0`); TTS (Kokoro) and STT (Whisper) are unchanged.
+**Opt-in alternative** to the default Ollama backend. Switch NodeAva's brain from Ollama to
+**LM Studio** by setting `LLM_BACKEND=lmstudio`, with a live, auto-discovered picker for
+*every* model in your LM Studio library. The avatar's LLM then runs through LM Studio's
+**native** REST API (`/api/v0`); TTS (Kokoro) and STT (Whisper) are unchanged.
 
 > **Verified end-to-end** against a live LM Studio (115-model library): backend switch,
 > 112-model auto-discovery, residency, per-model swap, and streaming + non-streaming chat
@@ -30,8 +31,8 @@ curl http://localhost:1234/api/v0/models | head      # should list your models
 
 ## 1. Activate
 
-LM Studio is the **default** backend now (`LLM_BACKEND=lmstudio` in `docker-compose.yml`).
-Rebuild + restart so the new orchestrator code, env, and dashboard take effect:
+Set `LLM_BACKEND=lmstudio` in your `.env` (the docker-compose default is `ollama`).
+Then rebuild + restart so the new orchestrator code, env, and dashboard take effect:
 
 ```bash
 docker compose up -d --build orchestrator frontend
@@ -87,19 +88,21 @@ via the orchestrator.
 
 ## 4. Switch back to Ollama
 
+Ollama is the docker-compose default, so just remove the override (or set it explicitly):
+
 ```bash
-echo "LLM_BACKEND=ollama" >> .env      # (or edit .env)
+sed -i '/^LLM_BACKEND=/d' .env          # or: echo "LLM_BACKEND=ollama" >> .env
 docker compose up -d --build orchestrator frontend
 ```
 
-Everything reverts to the host-Ollama path. Both backends coexist in the catalog; only the
-*default* and the discovery source change.
+The host-Ollama path takes over. Both backends coexist in the catalog; only the *active*
+backend and the discovery source change.
 
 Per-deploy overrides (in `.env`):
 
 | Var | Default | Meaning |
 |---|---|---|
-| `LLM_BACKEND` | `lmstudio` | `lmstudio` or `ollama` |
+| `LLM_BACKEND` | `ollama` | `ollama` (default) or `lmstudio` (opt-in) |
 | `LMSTUDIO_URL` | `http://host.docker.internal:1234` | LM Studio server as seen from the container |
 | `LMSTUDIO_DEFAULT_MODEL` | `qwen/qwen3-4b-2507` | fallback for the `auto` brain |
 

@@ -35,12 +35,13 @@ services:
       # Plan #7: catalog.yml must be visible inside the container.
       - ./configs:/app/configs:ro
     environment:
-      # Plan #11: LM Studio is the active local LLM backend by default. Flip
-      # LLM_BACKEND=ollama (in .env) to fall back to the host Ollama install.
-      # LM Studio must be serving on the local network (Developer ▸ Settings ▸
-      # "Serve on Local Network") so the container can reach it via
-      # host.docker.internal:1234.
-      - LLM_BACKEND=${LLM_BACKEND:-lmstudio}
+      # Plan #11: local LLM backend. Defaults to "ollama" (the upstream
+      # workshop path). Set LLM_BACKEND=lmstudio in .env to opt in to LM Studio
+      # — the orchestrator then talks LM Studio's native /api/v0 API and the
+      # dashboard auto-discovers your whole LM Studio model library.
+      # LM Studio must be served on the local network (Developer ▸ Settings ▸
+      # "Serve on Local Network") so the container reaches host.docker.internal:1234.
+      - LLM_BACKEND=${LLM_BACKEND:-ollama}
       - LMSTUDIO_URL=${LMSTUDIO_URL:-http://host.docker.internal:1234}
       - LMSTUDIO_DEFAULT_MODEL=${LMSTUDIO_DEFAULT_MODEL:-qwen/qwen3-4b-2507}
       - OLLAMA_URL=http://host.docker.internal:11434

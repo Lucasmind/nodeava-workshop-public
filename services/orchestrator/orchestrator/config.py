@@ -25,9 +25,10 @@ class Settings(BaseSettings):
     # LM Studio backend (Plan #11). LM Studio's native REST API lives at
     # <lmstudio_url>/api/v0/* and is OpenAI-shaped for chat (streaming +
     # tool_calls verified) while additionally returning stats/model_info.
-    # `llm_backend` selects the active LOCAL backend: "ollama" or "lmstudio".
-    # Default stays "ollama" (preserves the upstream workshop + test suite);
-    # docker-compose.yml sets LLM_BACKEND=lmstudio for the LM Studio deployment.
+    # `llm_backend` selects the active LOCAL backend: "ollama" (default) or
+    # "lmstudio". docker-compose.yml passes the same default through
+    # `LLM_BACKEND=${LLM_BACKEND:-ollama}`; set `LLM_BACKEND=lmstudio` in `.env`
+    # to opt into the LM Studio path.
     lmstudio_url: str = "http://host.docker.internal:1234"
     llm_backend: str = "ollama"
     # Concrete model the LM Studio "auto" brain falls back to when nothing is

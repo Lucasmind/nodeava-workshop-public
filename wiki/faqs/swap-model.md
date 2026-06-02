@@ -2,9 +2,9 @@
 
 NodeAva's [[orchestrator]] sits at port 8082 and selects the model from server-side state, so swapping the LLM can be done live from the dashboard, at the deploy level, or by changing which backend you point at.
 
-## Easiest: pick from the dashboard (LM Studio)
+## Easiest: pick from the dashboard (LM Studio opt-in)
 
- When `LLM_BACKEND=lmstudio` (the docker-compose default), the orchestrator auto-discovers **every model in your LM Studio library** and lists them in the dashboard's **Brain** dropdown (loaded models first, with a green "loaded" chip). Just pick one — selecting a model and chatting JIT-loads it in LM Studio. The **LM Studio (auto)** brain always follows whatever model you currently have loaded.
+When you set `LLM_BACKEND=lmstudio` (the docker-compose default is `ollama`), the orchestrator auto-discovers **every model in your LM Studio library** and lists them in the dashboard's **Brain** dropdown (loaded models first, with a green "loaded" chip). Just pick one — selecting a model and chatting JIT-loads it in LM Studio. The **LM Studio (auto)** brain always follows whatever model you currently have loaded.
 
 This uses LM Studio's native API (`/api/v0`) and needs LM Studio running with "Serve on Local Network" enabled. Full guide: `docs/lmstudio-runbook.md`. TTS is unaffected — LM Studio cannot do text-to-speech, so [[kokoro-tts]] still handles the voice.
 

@@ -11,11 +11,13 @@ Browser (localhost:3000)
   └── nginx ──┬── /api/stt/ ──► whisper.cpp (port 8080)        [Vulkan]
               ├── /api/tts/ ──► Kokoro-FastAPI (port 8880)      [CUDA/ROCm]
               └── /api/llm/ ──► Orchestrator (port 8082)
-                                 └─► Ollama on host (port 11434) [GPU]
+                                 ├─► Ollama on host (:11434)                    [default]
+                                 └─► LM Studio on host (:1234, native /api/v0)  [LLM_BACKEND=lmstudio, Plan #11]
 ```
 
 - **Frontend**: Vite + Three.js + TalkingHead + VAD-web (browser-based orchestrator)
-- **LLM**: Qwen3-4B via Ollama on host (thinking model with `<think>` tags)
+- **LLM**: Qwen3-4B via Ollama on host (default), OR LM Studio (native `/api/v0` API; whole
+  library auto-discovered) — selected by `LLM_BACKEND` (see `docs/lmstudio-runbook.md`)
 - **TTS**: Kokoro-82M via Kokoro-FastAPI (returns PCM + word timestamps)
 - **STT**: Whisper base.en via whisper.cpp (Vulkan)
 - **Orchestrator**: OpenAI-compatible proxy + agentic tool loop + command center backend
@@ -182,3 +184,25 @@ Docker Desktop on macOS runs a Linux VM — no GPU passthrough to Metal/MPS. Doc
 - Tool toggles (web_search / wiki) now live in `state.tools` rather than browser localStorage; frontend's ControlPanel POSTs to /v1/swap on change
 - Interactive teaching scripts in `scripts/demos/` (test-llm, test-tts, test-stt, test-pipeline, test-orchestrator, list-models) back slides 13-24 of the workshop deck
 - Setup: `bash scripts/setup-linux.sh` (Linux/WSL2) or `bash scripts/setup-mac.sh` (macOS) installs Ollama and pulls default models
+
+## Plan #11 — LM Studio backend (native API + dynamic discovery)
+
+Full guide: **`docs/lmstudio-runbook.md`**. Selected by `LLM_BACKEND` env (`ollama` default | `lmstudio` opt-in).
+
+- **New brain kind `lmstudio`** → `LMStudioProvider` (`providers/lmstudio.py`), a 3-line subclass of
+  `OllamaProvider` that targets LM Studio's NATIVE endpoint `POST /api/v0/chat/completions`. The wire
+  format is identical OpenAI-shaped SSE — streaming + `tool_calls` both verified — so the parser is reused.
+  The native response also carries `stats`/`model_info`/`runtime` (TTFT, tok/s).
+- **Discovery + residency** in `system/lmstudio.py` (`LMStudioBackend`): `GET /api/v0/models` →
+  `list_models()` (filters to `llm`/`vlm`, flags `loaded` + `thinks`) and `query()` (residency snapshot in
+  the same shape as `OllamaResidency`). Never raises.
+- **Dynamic catalog**: `/v1/catalog` calls `Catalog.sync_dynamic_brains(...)` to merge every LM Studio model
+  as an `lmstudio:<id>` brain (loaded-first). The dashboard Brain dropdown auto-lists the whole library.
+- **`lmstudio-auto` brain** (`model: auto`) resolves at request time to the loaded model, else
+  `LMSTUDIO_DEFAULT_MODEL`. `main.py` promotes it to the default brain when `LLM_BACKEND=lmstudio` and
+  resets a stale non-LM-Studio active brain on boot.
+- **Backend-aware routes**: `/v1/models`, `/v1/state`, `/v1/swap`, `/v1/catalog`, `/v1/chat/completions`
+  all follow `llm_backend`. `nginx.conf` + `vite.config.js` add `/api/lmstudio/` (raw passthrough, Lab 1).
+- **TTS unchanged**: LM Studio has no audio API (tested — see runbook §5). Kokoro remains the TTS engine.
+- Tests: `tests/test_lmstudio.py` (config, provider, discovery/residency, dispatcher, dynamic merge, and
+  route-level catalog + chat-auto). Whole suite: 171 passing.

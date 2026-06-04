@@ -11,7 +11,7 @@
 <header class="lab-header">
   <a class="home" href="index.html">← Workshop Lab</a>
   <h1>Lab 1 · The Brain</h1>
-  <span class="step-tag">POST /api/ollama/v1/chat/completions</span>
+  <span class="step-tag" id="step-tag">POST /api/ollama/v1/chat/completions</span>
 </header>
 
 <main>
@@ -19,10 +19,13 @@
 <div id="preflight" class="preflight checking">Checking services…</div>
 
 <section class="intro">
-  <b>What you're testing:</b> Ollama running on your host machine,
-  serving <code>qwen3:4b-instruct</code> <b>directly</b> (this lab bypasses
-  the orchestrator so you measure raw LLM latency — Lab 4 demos the
-  orchestrator). This is the cognition layer — the part that decides
+  <b>What you're testing:</b> a local LLM running on your host machine,
+  serving your selected model <b>directly</b> (this lab bypasses the orchestrator
+  so you measure raw LLM latency — Lab 4 demos the orchestrator). The Backend
+  knob below lets you point at <b>Ollama</b> (default — serving
+  <code>qwen3:4b-instruct</code>) or <b>LM Studio</b> (native <code>/api/v0</code> —
+  picks from your whole library, even logs server-measured tok/s + TTFT). Same
+  OpenAI-shaped wire on both. This is the cognition layer — the part that decides
   what to say.
   <span class="what-youll-see">
     <b>What you'll see:</b> tokens streamed one chunk at a time (not a wall
@@ -58,8 +61,15 @@
       <div class="controls-body">
         <div class="controls-grid">
           <div class="control">
+            <label for="backend">Backend <span style="color:var(--text-dim)">(Plan #11)</span></label>
+            <select id="backend">
+              <option value="ollama" selected>Ollama (default — /v1)</option>
+              <option value="lmstudio">LM Studio (native /api/v0)</option>
+            </select>
+          </div>
+          <div class="control">
             <label for="model">Model</label>
-            <select id="model"><option value="qwen3:4b-instruct">qwen3:4b-instruct (loading…)</option></select>
+            <select id="model"><option value="qwen3:4b-instruct">loading models…</option></select>
           </div>
           <div class="control">
             <label for="temp">Temperature <span style="color:var(--text-dim)">(0=deterministic, 2=wild)</span></label>
@@ -121,16 +131,55 @@ const $   = (id) => document.getElementById(id);
 const out = $("out");
 const con = $("console");
 
-NA.preflight("preflight", ["ollama"]);
+// Plan #11 — two-backend toggle. Both backends speak the same OpenAI-shaped wire,
+// so the BACKENDS map only parameterizes the 4 things that actually differ:
+// the endpoint, the model-list source, the preflight key, and the default model.
+// The SSE parser, sampling controls, and chip timing below are backend-agnostic.
+const BACKENDS = {
+  ollama: {
+    endpoint: "/api/ollama/v1/chat/completions",
+    listModels: () => NA.listOllamaModels(),
+    preflight: "ollama",
+    defaultModel: "qwen3:4b-instruct",
+  },
+  lmstudio: {
+    endpoint: "/api/lmstudio/api/v0/chat/completions",
+    listModels: () => NA.listLmStudioModels(),
+    preflight: "lmstudio",
+    defaultModel: "qwen/qwen3-4b-2507",
+  },
+};
+const currentBackend = () => BACKENDS[$("backend").value];
 
-// Populate model dropdown from the host's Ollama
-(async () => {
-  const models = await NA.listOllamaModels();
-  if (!models.length) return;
+async function refreshModels() {
+  const b = currentBackend();
+  $("step-tag").textContent = "POST " + b.endpoint;
+  const models = await b.listModels();
+  if (!models.length) {
+    NA.fillSelect($("model"), [{
+      value: b.defaultModel,
+      label: b.defaultModel + " (backend not reachable)",
+    }]);
+    return;
+  }
+  // listLmStudioModels reports m.loaded; listOllamaModels does not — that branch is harmless.
+  const firstLoaded = models.find(m => m.loaded);
+  const defaultName = firstLoaded ? firstLoaded.name : b.defaultModel;
   NA.fillSelect($("model"), models.map(m => ({
-    value: m.name, label: m.name, selected: m.name === "qwen3:4b-instruct",
+    value: m.name,
+    label: m.name + (m.loaded ? "  (loaded)" : ""),
+    selected: m.name === defaultName,
   })));
-})();
+}
+
+// Initial preflight + populate. Re-run both when the Backend toggle changes.
+// async/await so a rapid toggle + Run can't race ahead of the model-list fetch.
+async function syncBackend() {
+  NA.preflight("preflight", [currentBackend().preflight]);
+  await refreshModels();
+}
+syncBackend();
+$("backend").addEventListener("change", syncBackend);
 
 // Live value displays for sliders
 NA.bindSlider($("temp"),  $("temp-val"),  (v) => Number(v).toFixed(2));
@@ -150,13 +199,15 @@ $("clear").onclick = () => {
 $("go").onclick = async () => {
   const prompt = $("prompt").value.trim();
   if (!prompt) return;
+  // Capture backend at click time so a mid-request toggle doesn't move the goalposts.
+  const b = currentBackend();
   const streaming = $("stream").checked;
   out.textContent = "";
   NA.clearConsole(con);
   NA.clearChips("chip-ttft", "chip-total", "chip-tps", "chip-tokens");
   $("go").disabled = true;
 
-  NA.logLine(con, "→ POST /api/ollama/v1/chat/completions  (stream=" + streaming + ")", "event");
+  NA.logLine(con, "→ POST " + b.endpoint + "  (stream=" + streaming + ")", "event");
   NA.logLine(con, "    body.messages = [{role: 'user', content: <prompt>}]", "");
 
   const t0 = NA.now();
@@ -171,7 +222,7 @@ $("go").onclick = async () => {
     if (sysPrompt) messages.push({ role: "system", content: sysPrompt });
     messages.push({ role: "user", content: prompt });
 
-    const resp = await fetch("/api/ollama/v1/chat/completions", {
+    const resp = await fetch(b.endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -209,9 +260,15 @@ $("go").onclick = async () => {
       const json = await resp.json();
       const text = json.choices?.[0]?.message?.content || "";
       out.textContent = text;
-      tokenCount = Math.ceil(text.length / 4); // rough estimate
+      tokenCount = json.usage?.completion_tokens || Math.ceil(text.length / 4);
       charCount = text.length;
       NA.logLine(con, "← non-streaming response (" + text.length + " chars)", "ok");
+      // LM Studio's native API reports server-measured stats (Plan #11; Ollama does not).
+      if (json.stats) {
+        NA.logLine(con, "← LM Studio: " + (json.stats.tokens_per_second || 0).toFixed(1)
+          + " tok/s, TTFT " + Math.round((json.stats.time_to_first_token || 0) * 1000)
+          + " ms (server-measured)", "ok");
+      }
     }
 
     const tTotal = NA.now() - t0;

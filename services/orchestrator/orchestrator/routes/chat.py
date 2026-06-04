@@ -24,6 +24,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from orchestrator.agentic import agentic_loop
+from orchestrator.catalog import CatalogError
 from orchestrator.events import (
     ErrorEvent,
     FinalDoneEvent,
@@ -67,10 +68,31 @@ async def chat_completions(request: Request):
 
     state_store = request.app.state.state_store
     catalog = request.app.state.catalog
+    settings = request.app.state.settings
     state = state_store.get_state()
 
-    # Brain selection from state
-    brain = catalog.brain(state["brain"])
+    # Brain selection from state. Fall back to the catalog default if the
+    # persisted brain id is gone (e.g. a dynamic LM Studio brain selected
+    # before a restart, before the next /v1/catalog refresh re-adds it).
+    try:
+        brain = catalog.brain(state["brain"])
+    except CatalogError:
+        brain = catalog.default_brain()
+        state_store.set_state("brain", brain.id)
+
+    # Plan #11: the LM Studio "auto" brain resolves to a concrete model id at
+    # request time — the currently-loaded model, else the configured fallback
+    # (which LM Studio JIT-loads on first use).
+    model_override = None
+    if brain.kind == "lmstudio" and brain.model in ("auto", ""):
+        lmstudio = getattr(request.app.state, "lmstudio", None)
+        if lmstudio is not None:
+            model_override = await lmstudio.pick_model(
+                fallback=settings.lmstudio_default_model
+            )
+        else:
+            model_override = settings.lmstudio_default_model
+
     api_key = (
         request.headers.get("X-Provider-Key")
         or request.headers.get("x-provider-key")
@@ -78,9 +100,11 @@ async def chat_completions(request: Request):
     )
     provider = dispatch_for_brain(
         brain,
-        ollama_url=request.app.state.settings.ollama_url,
-        request_timeout=request.app.state.settings.request_timeout,
+        ollama_url=settings.ollama_url,
+        lmstudio_url=settings.lmstudio_url,
+        request_timeout=settings.request_timeout,
         api_key=api_key or None,
+        model_override=model_override,
     )
 
     # Personality system prompt at request time.

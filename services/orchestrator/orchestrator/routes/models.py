@@ -8,7 +8,15 @@ router = APIRouter()
 
 @router.get("/v1/models")
 async def list_models(request: Request) -> JSONResponse:
-    backend = request.app.state.settings.ollama_url
+    settings = request.app.state.settings
+    # Proxy whichever local backend is active. Both Ollama and LM Studio expose
+    # an OpenAI-compatible /v1/models ({data:[{id}, ...]}), which is the shape
+    # the frontend preflight + Lab pages expect.
+    backend = (
+        settings.lmstudio_url
+        if settings.llm_backend == "lmstudio"
+        else settings.ollama_url
+     ).rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{backend}/v1/models")

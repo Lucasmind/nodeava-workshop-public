@@ -45,7 +45,8 @@
 
 <section class="intro">
   <b>What you're testing:</b> the FastAPI orchestrator that sits between
-  the browser and Ollama. It holds the <i>personality</i> — a system
+  the browser and the LLM backend (Ollama by default; switchable to LM Studio
+  via <code>LLM_BACKEND</code>). It holds the <i>personality</i> — a system
   prompt that gets prepended to every chat — and the <i>brain</i> selection
   (which model to use). The same model under two different personalities
   produces dramatically different answers; the personality <b>is</b> the

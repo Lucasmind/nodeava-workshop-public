@@ -144,6 +144,9 @@ async function preflight(elId, services) {
     // Lab 1 uses this so attendees measure raw LLM TTFT without the
     // orchestrator's personality prefill or agentic tool loop in the way.
     ollama: () => fetch("/api/ollama/v1/models").then(r => r.ok),
+    // 'lmstudio' = bypasses the orchestrator, hits LM Studio's native API on
+    // the host directly (Plan #11). Lab 1 uses this for raw model-latency tests.
+    lmstudio: () => fetch("/api/lmstudio/api/v0/models").then(r => r.ok),
     tts:    () => fetch("/api/tts/v1/audio/voices").then(r => r.ok),
     stt:    () => fetch("/api/stt/").then(r => r.ok || r.status === 404 || r.status === 405),
     orch:   () => fetch("/api/orch/v1/state").then(r => r.ok),
@@ -183,6 +186,20 @@ async function listOllamaModels() {
   } catch { return []; }
 }
 
+// Fetch chat-capable models from LM Studio via its native /api/v0/models
+// (Plan #11). Returns [{name, loaded}], loaded models first; embeddings excluded.
+async function listLmStudioModels() {
+  try {
+    const r = await fetch("/api/lmstudio/api/v0/models");
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (j.data || [])
+      .filter((m) => m.type === "llm" || m.type === "vlm")
+      .map((m) => ({ name: m.id, loaded: m.state === "loaded" }))
+      .sort((a, b) => (b.loaded - a.loaded) || a.name.localeCompare(b.name));
+  } catch { return []; }
+}
+
 // Populate a <select> with the given options. Each option is {value, label, selected?}.
 function fillSelect(selEl, options) {
   while (selEl.firstChild) selEl.removeChild(selEl.firstChild);
@@ -210,5 +227,5 @@ window.NA = {
   logLine, clearConsole,
   parseSSE, pcmToWavBlob, b64ToBytes,
   preflight, fmtBytes,
-  listOllamaModels, fillSelect, bindSlider,
+  listOllamaModels, listLmStudioModels, fillSelect, bindSlider,
 };
